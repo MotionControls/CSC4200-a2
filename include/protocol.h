@@ -1,4 +1,4 @@
-#include <cstdint>
+#include "shared.h"
 
 /*
  * protocol.h

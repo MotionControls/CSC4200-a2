@@ -1,128 +1,94 @@
-/*
-Your server must:
-
-- Receive exactly 12 bytes for the header.
-- Loop on `recv()` until all 12 bytes are received.
-- Use `ntohl()` to interpret each field.
-- Print:
-  - Version
-  - Message Type
-  - Message Length
-- Validate that `Version == 17`.
-- If valid, receive the payload based on `Message Length`.
-- Send `"Hello"` back to the client.
-*/
-
-#include "shared.h"
+#include "../include/shared.h"
 
 int main(int argc, char** argv){
-	// Check if user needs usage.
-	if(argc > 1 && strcmp(argv[1], "--help") == 0){
-		printf("USAGE: appserver [?address] [?port]\n");
-		printf("\t?address: Address to host from. Defaults to first available machine address.\n\t?port: Port to host from. Defaults to 8008.\n");
-		return 0;
+	if(argc < 9) return 0;
+	
+	// Get args.
+	char* port, *logPath, *serverIp, *filePath;
+	for(int i = 1; i < argc; i+2){
+		switch(argv[i]){
+			case "-p":
+				port = argv[i+1]; 
+				break;
+			case "-l":
+				logPath = argv[i+1];
+				break;
+			case "-s":
+				serverIp = argv[i+1]; 
+				break;
+			case "-f":
+				filePath = argv[i+1];
+				break;
+		}
 	}
 	
-	printf("Starting server...\n");
+	printf("Starting client...\n");
 	
 	struct addrinfo hints, *res, *walk;
-	struct sockaddr_storage theirAddr;
-	socklen_t theirSize;
-	int status, sock, newSock;
+	int status, sock;
 	char ipstr[INET6_ADDRSTRLEN];
 	char* port = (argc > 2) ? argv[2] : USED_PORT;
 	
 	// Setup address.
 	// https://man7.org/linux/man-pages/man3/getaddrinfo.3.html
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
+	memset(&hints, 0, sizeof(hints));	// Clear memory.
+	hints.ai_family = AF_UNSPEC;		// Use IPv4 or IPv6.
+	hints.ai_socktype = SOCK_STREAM;	// Use TCP sockets.
 	
-	// If we don't specify an address, use first available when binding.
-	if(argc > 1) hints.ai_flags = AI_PASSIVE;
-	
-	status = getaddrinfo(
-		(argc > 1) ? argv[1] : NULL,	// NULL if address has not been specified.
-		port,
-		&hints, &res);
+	status = getaddrinfo(argv[1], port, &hints, &res);
 	if(status != 0){
 		printf("getaddrinfo err: %s.\n", gai_strerror(status));
 		return 1;
 	}
 	
-	// Show available addresses.
-	// Only shows given address if specified.
-	WalkAddrInfo(res);
-	
 	// Create socket using given address info.
 	sock = CreateSocket(res);
 	
-	// Tell socket to reuse port, even if "in use."
-	int reuse = 1;
-	if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) == -1){
-		perror("setsockopt err");
+	// Connect using socket.
+	printf("Connecting to %s:%s...\n", argv[1], port);
+	if(connect(sock, res->ai_addr, res->ai_addrlen) != 0){
+		perror("connect err");
 		return 1;
-	}
-	
-	// Bind socket.
-	printf("Binding socket...\n");
-	if(bind(sock, res->ai_addr, res->ai_addrlen) != 0){
-		perror("bind err");
-		return 1;
-	}
-	
-	// Listen for up to 10 connections.
-	printf("Listening...\n");
-	if(listen(sock, 10) != 0){
-		perror("listen err");
-		return 1;
-	}
-	
-	while(1){
-		theirSize = sizeof(theirAddr);
-		
-		// Get connection socket.
-		newSock = accept(sock, (struct sockaddr*)&theirAddr, &theirSize);
-		if(newSock == -1){
-			perror("accept err");
-			continue;
-		}
-		
+	}else{
 		// Convert connected address to char*.
 		void* addr;
-		struct sockaddr* check = (struct sockaddr*)&theirAddr;
+		struct sockaddr* check = (struct sockaddr*)res->ai_addr;
 		if(check->sa_family == AF_INET){
 			addr = &(((struct sockaddr_in*)check)->sin_addr);
 		}else{
 			addr = &(((struct sockaddr_in6*)check)->sin6_addr);
 		}
+		inet_ntop(res->ai_family, addr, ipstr, sizeof(ipstr));
 		
-		inet_ntop(theirAddr.ss_family, addr, ipstr, sizeof(ipstr));
 		printf("Connected to %s.\n", ipstr);
 		
-		// Get packet.
-		uint32_t packet[4];
+		// Assemble packet.
+		float payload = 42.0f;
+		printf("Sending %f.\n", payload);
+		int paylen = sizeof(float);
+		uint32_t* packet = CreatePacket(17, 2, paylen, payload);
+		
+		// Send packet.
+		int numbytes = send(sock, packet, HEADER_SIZE, 0);
+		if(CheckSend(numbytes, HEADER_SIZE)){
+			close(sock);
+			return 1;
+		}
+		
+		// Get response packet.
 		time_t startTime = time(NULL);
-		int numbytes = GetBuffer(HEADER_SIZE, packet, newSock, startTime, -1);
-		if(CheckRecv(numbytes, HEADER_SIZE, startTime) || ntohl(packet[0]) != 17 || ntohl(packet[2]) != sizeof(ntohl(packet[3]))){
-			close(newSock);
-			continue;
+		numbytes = GetBuffer(HEADER_SIZE, packet, sock, startTime, -1);
+		if(CheckRecv(numbytes, HEADER_SIZE, startTime)){
+			close(sock);
+			return 1;
 		}
 		printf("Got packet:\n\tVersion: %i\n\tType: %i\n\tLength: %i\n\tPayload: %f\n", ntohl(packet[0]), ntohl(packet[1]), ntohl(packet[2]), (float)ntohl(packet[3]));
+
+		if((float)ntohl(packet[3]) == payload) printf("Server returned matching float.\n");
 		
-		// Resend packet.
-		numbytes = send(newSock, packet, HEADER_SIZE, 0);
-		if(CheckSend(numbytes, HEADER_SIZE)){
-			close(newSock);
-			continue;
-		}
-		
-		// Close connection and continue listening.
-		close(newSock);
-		printf("Listening...\n");
+		close(sock);
 	}
 	
-	close(sock);
 	printf("Exiting...\n");
 	return 0;
 }

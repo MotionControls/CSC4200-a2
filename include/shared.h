@@ -16,33 +16,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define USED_PORT	"8008"
 #define BUFFER_SIZE	100
-#define HEADER_SIZE	sizeof(uint32_t)*4
 #define TIMEOUT		10
-
-void WalkAddrInfo(struct addrinfo* res){
-	char ipstr[INET6_ADDRSTRLEN];
-	for(struct addrinfo* walk = res; walk != NULL; walk = walk->ai_next){
-		void *addr;
-		char *ipver;
-		struct sockaddr_in *ipv4;
-		struct sockaddr_in6 *ipv6;
-		
-		if(walk->ai_family == AF_INET){
-			ipv4 = (struct sockaddr_in*)walk->ai_addr;
-			addr = &(ipv4->sin_addr);
-			ipver = "IPv4";
-		}else{
-			ipv6 = (struct sockaddr_in6*)walk->ai_addr;
-			addr = &(ipv6->sin6_addr);
-			ipver = "IPv6";
-		}
-		
-		inet_ntop(walk->ai_family, addr, ipstr, sizeof(ipstr));		
-		printf("Using %s IP: %s.\n", ipver, ipstr);
-	}
-}
 
 int CreateSocket(struct addrinfo* res){
 	printf("Creating socket...\n");
