@@ -1,3 +1,5 @@
+#include <cstdint>
+
 /*
  * protocol.h
  * CSC4200 — Program 2: TCP-Like Reliable Protocol over UDP
@@ -29,3 +31,5 @@
  *   Bit 1 (S) — SYN  : Synchronize sequence numbers (handshake)
  *   Bit 2 (A) — ACK  : Acknowledgment Number field is valid
  */
+
+#define HEADER_SIZE sizeof(uint32_t * 4)
