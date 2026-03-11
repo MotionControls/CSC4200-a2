@@ -2,3 +2,5 @@
 *.o
 server
 client
+*.sublime-project
+*.sublime-workspace
