@@ -32,4 +32,4 @@
  *   Bit 2 (A) — ACK  : Acknowledgment Number field is valid
  */
 
-#define HEADER_SIZE sizeof(uint32_t * 4)
+#define HEADER_SIZE sizeof(uint32_t)*4

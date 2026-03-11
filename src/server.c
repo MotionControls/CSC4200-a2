@@ -1,22 +1,24 @@
 #include "../include/shared.h"
 
 int main(int argc, char** argv){
-	if(argc < 5) return 0;
+	if(argc < 5) return 1;
 	
 	// Get args.
 	char* port, *logPath;
-	for(int i = 1; i < argc; i+2){
-		switch(argv[i]){
-			case "-p":
-				port = argv[i+1]; 
-				break;
-			case "-s":
-				logPath = argv[i+1];
-				break;
+	for(int i = 1; i < argc; i += 2){
+		if(strcmp(argv[i], "-p") == 0){
+			port = argv[i+1];
+		}else if(strcmp(argv[i], "-s") == 0){
+			logPath = argv[i+1];
 		}
 	}
+
+	if(port == NULL || logPath == NULL){
+		printf("Setup err: Missing args.\n");
+		return 1;
+	}
 	
-	printf("Starting server...\n");
+	printf("Starting server...\n\tport = %s\n\tlog = %s\n", port, logPath);
 	
 	struct addrinfo hints, *res, *walk;
 	struct sockaddr_storage theirAddr;
@@ -30,18 +32,11 @@ int main(int argc, char** argv){
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE;
 	
-	status = getaddrinfo(
-		(argc > 1) ? argv[1] : NULL,	// NULL if address has not been specified.
-		port,
-		&hints, &res);
+	status = getaddrinfo(NULL, port, &hints, &res);
 	if(status != 0){
 		printf("getaddrinfo err: %s.\n", gai_strerror(status));
 		return 1;
 	}
-	
-	// Show available addresses.
-	// Only shows given address if specified.
-	WalkAddrInfo(res);
 	
 	// Create socket using given address info.
 	sock = CreateSocket(res);
@@ -59,6 +54,9 @@ int main(int argc, char** argv){
 		perror("bind err");
 		return 1;
 	}
+
+	AddrToChar(ipstr, res);
+	printf("Hosting as %s:%s.\n", ipstr, port);
 	
 	// Listen for up to 10 connections.
 	printf("Listening...\n");

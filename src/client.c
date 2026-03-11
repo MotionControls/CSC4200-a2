@@ -1,41 +1,39 @@
 #include "../include/shared.h"
 
 int main(int argc, char** argv){
-	if(argc < 9) return 0;
+	if(argc < 9) return 1;
 	
 	// Get args.
 	char* port, *logPath, *serverIp, *filePath;
-	for(int i = 1; i < argc; i+2){
-		switch(argv[i]){
-			case "-p":
-				port = argv[i+1]; 
-				break;
-			case "-l":
-				logPath = argv[i+1];
-				break;
-			case "-s":
-				serverIp = argv[i+1]; 
-				break;
-			case "-f":
-				filePath = argv[i+1];
-				break;
+	for(int i = 1; i < argc; i += 2){
+		if(strcmp(argv[i], "-p") == 0){
+			port = argv[i+1];
+		}else if(strcmp(argv[i], "-l") == 0){
+			logPath = argv[i+1];
+		}else if(strcmp(argv[i], "-s") == 0){
+			serverIp = argv[i+1];
+		}else if(strcmp(argv[i], "-f") == 0){
+			filePath = argv[i+1];
 		}
 	}
+
+	if(port == NULL || serverIp == NULL || filePath == NULL || logPath == NULL){
+		printf("Setup err: Missing args.\n");
+		return 1;
+	}
 	
-	printf("Starting client...\n");
+	printf("Starting client...\n\tport = %s\n\tIP = %s\n\tlog = %s\n\tfile = %s\n", port, serverIp, logPath, filePath);
 	
 	struct addrinfo hints, *res, *walk;
 	int status, sock;
 	char ipstr[INET6_ADDRSTRLEN];
-	char* port = (argc > 2) ? argv[2] : USED_PORT;
 	
 	// Setup address.
-	// https://man7.org/linux/man-pages/man3/getaddrinfo.3.html
-	memset(&hints, 0, sizeof(hints));	// Clear memory.
-	hints.ai_family = AF_UNSPEC;		// Use IPv4 or IPv6.
-	hints.ai_socktype = SOCK_STREAM;	// Use TCP sockets.
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
 	
-	status = getaddrinfo(argv[1], port, &hints, &res);
+	status = getaddrinfo(serverIp, port, &hints, &res);
 	if(status != 0){
 		printf("getaddrinfo err: %s.\n", gai_strerror(status));
 		return 1;
@@ -45,21 +43,12 @@ int main(int argc, char** argv){
 	sock = CreateSocket(res);
 	
 	// Connect using socket.
-	printf("Connecting to %s:%s...\n", argv[1], port);
+	printf("Connecting to %s:%s...\n", serverIp, port);
 	if(connect(sock, res->ai_addr, res->ai_addrlen) != 0){
 		perror("connect err");
 		return 1;
 	}else{
-		// Convert connected address to char*.
-		void* addr;
-		struct sockaddr* check = (struct sockaddr*)res->ai_addr;
-		if(check->sa_family == AF_INET){
-			addr = &(((struct sockaddr_in*)check)->sin_addr);
-		}else{
-			addr = &(((struct sockaddr_in6*)check)->sin6_addr);
-		}
-		inet_ntop(res->ai_family, addr, ipstr, sizeof(ipstr));
-		
+		AddrToChar(ipstr, res);
 		printf("Connected to %s.\n", ipstr);
 		
 		// Assemble packet.

@@ -16,8 +16,21 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#include "protocol.h"
+
 #define BUFFER_SIZE	100
 #define TIMEOUT		10
+
+void AddrToChar(char* ipstr, struct addrinfo* info){
+	void* addr;
+	struct sockaddr* check = (struct sockaddr*)info->ai_addr;
+	if(check->sa_family == AF_INET){
+		addr = &(((struct sockaddr_in*)check)->sin_addr);
+	}else{
+		addr = &(((struct sockaddr_in6*)check)->sin6_addr);
+	}
+	inet_ntop(info->ai_family, addr, ipstr, sizeof(ipstr));
+}
 
 int CreateSocket(struct addrinfo* res){
 	printf("Creating socket...\n");
