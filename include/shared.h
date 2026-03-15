@@ -43,26 +43,6 @@ int CreateSocket(struct addrinfo* res){
 	return sock;
 }
 
-/*	GetBuffer(size, buffer, sock, startTime, ?expectedSize);
-	Returns number of bytes recieved.
-*/
-int GetBuffer(int size, void* buffer, int sock, time_t startTime, int expectedSize){
-	printf("Getting buffer...\n");
-	
-	// recv() only blocks until there is data to read,
-	// so if not all the data is present then we should ask for more.
-	int numbytes = 0;
-	do{
-		numbytes += recv(sock, buffer + numbytes, size, 0);
-		printf("\t%i / %i | %i\n", numbytes, size, expectedSize);
-	}while(numbytes < size &&
-		   (expectedSize <= -1 || numbytes < expectedSize) &&
-		   time(NULL) - startTime <= TIMEOUT);
-	
-	printf("\tGot %i bytes.\n", numbytes);
-	return numbytes;
-}
-
 /*	CheckSend(numbytes, size);
 	Returns true if error, otherwise false.
 */
@@ -92,21 +72,6 @@ bool CheckRecv(int numbytes, int size, time_t startTime){
 	}
 	
 	return false;
-}
-
-uint32_t* CreatePacket(int version, int type, int length, float payload){
-	uint32_t* buffer = (uint32_t*)malloc((sizeof(uint32_t)*4) + length);
-
-	uint32_t v = htonl(version);
-	uint32_t t = htonl(type);
-	uint32_t l = htonl(length);
-	uint32_t p = htonl(payload);
-	memcpy(&buffer[0], &v, sizeof(uint32_t));
-	memcpy(&buffer[1], &t, sizeof(uint32_t));
-	memcpy(&buffer[2], &l, sizeof(uint32_t));
-	memcpy(&buffer[3], &p, sizeof(uint32_t));
-
-	return buffer;
 }
 
 #endif

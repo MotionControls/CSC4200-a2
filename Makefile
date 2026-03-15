@@ -16,12 +16,15 @@ $(OBJ_DIR)/protocol.o: $(SRC)/protocol.c include/protocol.h | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 server: $(SRC)/server.c $(OBJ_DIR)/protocol.o
+	clear
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 client: $(SRC)/client.c $(OBJ_DIR)/protocol.o
+	clear
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
-play: $(SRC)/playground.c $(OBJ_DIR)/playground.o
+play: $(SRC)/playground.c $(OBJ_DIR)/protocol.o
+	clear
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 clean:
