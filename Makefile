@@ -21,5 +21,8 @@ server: $(SRC)/server.c $(OBJ_DIR)/protocol.o
 client: $(SRC)/client.c $(OBJ_DIR)/protocol.o
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
+play: $(SRC)/playground.c $(OBJ_DIR)/playground.o
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
 clean:
 	rm -rf $(OBJ_DIR) server client received_* *.log

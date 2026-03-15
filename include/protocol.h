@@ -33,3 +33,14 @@
  */
 
 #define HEADER_SIZE sizeof(uint32_t)*4
+
+#define FLAG_FIN	0b001
+#define FLAG_SYN	0b010
+#define FLAG_ACK	0b100
+
+// Can't do until Susmit explains.
+void PacketSerialize();
+void PacketDeserialize();
+void MakePacket();
+void LogPacket();
+void Timestamp();

@@ -1,3 +1,2 @@
-#include <stdio.h>
+#include "protocol.h"
 
-/* I'm here. */
