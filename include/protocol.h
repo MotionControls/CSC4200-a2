@@ -62,10 +62,20 @@ typedef struct{
 	void* payload;
 }Packet;
 
+// Packets.
 Packet MakePacket(uint32_t seq, uint32_t ack, void* payload, uint32_t length, uint32_t flags);
 uint32_t* PacketSerialize(Packet packet);
 Packet PacketDeserialize(uint32_t* buffer);
+int GetBuffer(void* buffer, int sock, int size, int expectedSize);
+int SendBuffer(void* buffer, int sock, int size);
+
+// Error checking.
+bool CheckRecv(int numbytes, int size);
+bool CheckSend(int numbytes, int size);
+
+// Logging.
 int LogPacket(char* log, int recv, Packet packet);
 char* Timestamp();
+void AddrToChar(char* ipstr, struct addrinfo* info);
 
 #endif

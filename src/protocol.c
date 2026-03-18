@@ -79,3 +79,84 @@ char* Timestamp(){
 	strftime(buffer, 50, "%Y-%m-%d-%H-%M-%S", localtime(&now));
 	return buffer;
 }
+
+void AddrToChar(char* ipstr, struct addrinfo* info){
+	void* addr;
+	struct sockaddr* check = (struct sockaddr*)info->ai_addr;
+	if(check->sa_family == AF_INET){
+		addr = &(((struct sockaddr_in*)check)->sin_addr);
+	}else{
+		addr = &(((struct sockaddr_in6*)check)->sin6_addr);
+	}
+	inet_ntop(info->ai_family, addr, ipstr, sizeof(ipstr));
+}
+
+void AddrToChar(char* ipstr, struct sockaddr_storage* info){
+	void* addr;
+	struct sockaddr* check = (struct sockaddr*)info;
+	if(check->sa_family == AF_INET){
+		addr = &(((struct sockaddr_in*)check)->sin_addr);
+	}else{
+		addr = &(((struct sockaddr_in6*)check)->sin6_addr);
+	}
+	inet_ntop(info->ai_family, addr, ipstr, sizeof(ipstr));
+}
+
+int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expectedSize){
+	printf("\tGetting buffer...\n");
+
+	socklen_t fromlen = sizeof(*addr);
+	int numbytes = 0;
+	do{
+		int got = recvfrom(sock, buffer + numbytes, size, 0, addr, &fromlen);
+		if(got == -1){
+			perror("recvfrom err");
+			return -1;
+		}
+
+		numbytes += got;
+		printf("\t%i / %i | %i\n", numbytes, size, expectedSize);
+	}while(numbytes < size && (expectedSize <= -1 || numbytes < expectedSize));
+	
+	printf("\tGot %i bytes.\n", numbytes);
+	return numbytes;
+}
+
+int SendBuffer(void* buffer, int sock, int size){
+	printf("\tSending buffer...\n");
+
+	int numbytes = 0;
+	do{
+		int sent = send(sock, buffer + numbytes, size, 0);
+		if(sent == -1){
+			perror("send err");
+			return -1;
+		}
+
+		numbytes += got;
+		printf("\t%i / %i\n", numbytes, size);
+	}while(numbytes < size);
+
+	printf("\tSent %i bytes.\n", numbytes);
+	return numbytes;
+}
+
+bool CheckRecv(int numbytes, int size){
+	if(numbytes < size){
+		perror("recvfrom err");
+		printf("\tReceived %u bytes.\n", numbytes);
+		return true;
+	}
+	
+	return false;
+}
+
+bool CheckSend(int numbytes, int size){
+	if(numbytes < size){
+		perror("send err");
+		printf("\tReceived %u bytes.\n", numbytes);
+		return true;
+	}
+	
+	return false;
+}

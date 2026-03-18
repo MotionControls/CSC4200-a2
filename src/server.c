@@ -1,5 +1,4 @@
-/*
-#include "../include/shared.h"
+#include "../include/protocol.h"
 
 int main(int argc, char** argv){
 	if(argc < 5) return 1;
@@ -20,17 +19,22 @@ int main(int argc, char** argv){
 	}
 	
 	printf("Starting server...\n\tport = %s\n\tlog = %s\n", port, logPath);
+
+	// Seed rand.
+	srand((unsigned)time(NULL) ^ getpid());
 	
-	struct addrinfo hints, *res, *walk;
+	uint32_t lastIsn;
+	struct addrinfo hints, *res;
 	struct sockaddr_storage theirAddr;
 	socklen_t theirSize;
 	int status, sock, newSock;
 	char ipstr[INET6_ADDRSTRLEN];
 	
+	/*
 	// Setup address.
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_socktype = SOCK_DGRAM;	// Specify UDP.
 	hints.ai_flags = AI_PASSIVE;
 	
 	status = getaddrinfo(NULL, port, &hints, &res);
@@ -38,9 +42,10 @@ int main(int argc, char** argv){
 		printf("getaddrinfo err: %s.\n", gai_strerror(status));
 		return 1;
 	}
+	*/
 	
 	// Create socket using given address info.
-	sock = CreateSocket(res);
+	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	
 	// Tell socket to reuse port, even if "in use."
 	int reuse = 1;
@@ -77,6 +82,7 @@ int main(int argc, char** argv){
 		}
 		
 		// Convert connected address to char*.
+		/*
 		void* addr;
 		struct sockaddr* check = (struct sockaddr*)&theirAddr;
 		if(check->sa_family == AF_INET){
@@ -84,10 +90,12 @@ int main(int argc, char** argv){
 		}else{
 			addr = &(((struct sockaddr_in6*)check)->sin6_addr);
 		}
-		
 		inet_ntop(theirAddr.ss_family, addr, ipstr, sizeof(ipstr));
+		*/
+		AddrToChar(ipstr, &theirAddr);
 		printf("Connected to %s.\n", ipstr);
 		
+		/*
 		// Get packet.
 		uint32_t packet[4];
 		time_t startTime = time(NULL);
@@ -104,7 +112,60 @@ int main(int argc, char** argv){
 			close(newSock);
 			continue;
 		}
-		
+		*/
+
+		// Get client ISN.
+		printf("Shaking hands...\n");
+		uint32_t* buffer;
+		int numbytes = GetBuffer(buffer, newSock, HEADER_SIZE, -1);
+		if(CheckRecv(numbytes, HEADER_SIZE)){
+			close(newSock);
+			continue;
+		}
+
+		Packet fromPacket = PacketDeserialize(buffer);
+		if(!(fromPacket.flags & FLAG_SYN >> 1)){
+			printf("GetBuffer err: FLAG_SYN not set.");
+			close(newSock);
+			continue;
+		}
+		uint32_t theirIsn = fromPacket.seq;
+
+		bool doTransmit;
+		do{
+			doTransmit = false;
+
+			// Send server ISN.
+			lastIsn = (uint32_t)rand();
+			uint32_t dummy = 0;
+			buffer = PacketSerialize(MakePacket(lastIsn, theirIsn + 1, &dummy, sizeof(uint32_t), FLAG_ACK | FLAG_SYN));
+			numbytes = SendBuffer(buffer, newSock, HEADER_SIZE);
+			if(CheckSend(numbytes, HEADER_SIZE)){
+				close(newSock);
+				break;
+			}
+
+			// Wait for ACK.
+			int opt = 1;
+			if(setsockopt(newSock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) < 0){
+				perror("setsockopt err");
+				close(newSock);
+				break;
+			}
+			
+			numbytes = GetBuffer(buffer, newSock, HEADER_SIZE, -1);
+			if(CheckRecv(numbytes, HEADER_SIZE)){
+				// Retransmit if timed-out.
+				if(errno == ETIMEDOUT){
+					doTransmit = true;
+					continue;
+				}
+				
+				close(newSock);
+				break;
+			}
+		}while(doTransmit);
+
 		// Close connection and continue listening.
 		close(newSock);
 		printf("Listening...\n");
@@ -114,4 +175,3 @@ int main(int argc, char** argv){
 	printf("Exiting...\n");
 	return 0;
 }
-*/
