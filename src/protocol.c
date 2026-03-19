@@ -80,18 +80,7 @@ char* Timestamp(){
 	return buffer;
 }
 
-void AddrToChar(char* ipstr, struct addrinfo* info){
-	void* addr;
-	struct sockaddr* check = (struct sockaddr*)info->ai_addr;
-	if(check->sa_family == AF_INET){
-		addr = &(((struct sockaddr_in*)check)->sin_addr);
-	}else{
-		addr = &(((struct sockaddr_in6*)check)->sin6_addr);
-	}
-	inet_ntop(info->ai_family, addr, ipstr, sizeof(ipstr));
-}
-
-void AddrToChar(char* ipstr, struct sockaddr_storage* info){
+void AddrToChar(char* ipstr, struct sockaddr_in* info){
 	void* addr;
 	struct sockaddr* check = (struct sockaddr*)info;
 	if(check->sa_family == AF_INET){
@@ -99,7 +88,7 @@ void AddrToChar(char* ipstr, struct sockaddr_storage* info){
 	}else{
 		addr = &(((struct sockaddr_in6*)check)->sin6_addr);
 	}
-	inet_ntop(info->ai_family, addr, ipstr, sizeof(ipstr));
+	inet_ntop(info->ss_family, addr, ipstr, sizeof(ipstr));
 }
 
 int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expectedSize){
@@ -133,7 +122,7 @@ int SendBuffer(void* buffer, int sock, int size){
 			return -1;
 		}
 
-		numbytes += got;
+		numbytes += sent;
 		printf("\t%i / %i\n", numbytes, size);
 	}while(numbytes < size);
 

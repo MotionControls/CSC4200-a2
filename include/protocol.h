@@ -54,6 +54,10 @@
 #define FLAG_SYN	0b010
 #define FLAG_ACK	0b100
 
+#define TIMEOUT_SEC		10
+#define TIMEOUT_USEC	0
+#define MAX_RETRIES		5
+
 typedef struct{
 	uint32_t seq;
 	uint32_t ack;
@@ -66,7 +70,7 @@ typedef struct{
 Packet MakePacket(uint32_t seq, uint32_t ack, void* payload, uint32_t length, uint32_t flags);
 uint32_t* PacketSerialize(Packet packet);
 Packet PacketDeserialize(uint32_t* buffer);
-int GetBuffer(void* buffer, int sock, int size, int expectedSize);
+int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expectedSize);
 int SendBuffer(void* buffer, int sock, int size);
 
 // Error checking.
@@ -76,6 +80,6 @@ bool CheckSend(int numbytes, int size);
 // Logging.
 int LogPacket(char* log, int recv, Packet packet);
 char* Timestamp();
-void AddrToChar(char* ipstr, struct addrinfo* info);
+void AddrToChar(char* ipstr, struct sockaddr_in* info);
 
 #endif

@@ -24,9 +24,8 @@ int main(int argc, char** argv){
 	srand((unsigned)time(NULL) ^ getpid());
 	
 	uint32_t lastIsn;
-	struct addrinfo hints, *res;
-	struct sockaddr_storage theirAddr;
-	socklen_t theirSize;
+	struct sockaddr_in* myAddr, *theirAddr;
+	socklen_t mySize, theirSize;
 	int status, sock, newSock;
 	char ipstr[INET6_ADDRSTRLEN];
 	
@@ -46,22 +45,26 @@ int main(int argc, char** argv){
 	
 	// Create socket using given address info.
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
+	myAddr->sin_family = AF_INET;
+	myAddr->sin_addr.s_addr = INADDR_ANY;
+	myAddr->sin_port = htons(port);
+	mySize = sizeof(myAddr);
 	
-	// Tell socket to reuse port, even if "in use."
+	// Tell socket to reuse given port, even if "in use."
 	int reuse = 1;
-	if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(int)) == -1){
+	if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &reuse, sizeof(int)) < 0){
 		perror("setsockopt err");
 		return 1;
 	}
 	
 	// Bind socket.
 	printf("Binding socket...\n");
-	if(bind(sock, res->ai_addr, res->ai_addrlen) != 0){
+	if(bind(sock, (struct sockaddr)myAddr, &mySize) != 0){
 		perror("bind err");
 		return 1;
 	}
 
-	AddrToChar(ipstr, res);
+	AddrToChar(ipstr, myAddr);
 	printf("Hosting as %s:%s.\n", ipstr, port);
 	
 	// Listen for up to 10 connections.
@@ -72,10 +75,11 @@ int main(int argc, char** argv){
 	}
 	
 	while(1){
+		printf("Listening...\n");
 		theirSize = sizeof(theirAddr);
 		
 		// Get connection socket.
-		newSock = accept(sock, (struct sockaddr*)&theirAddr, &theirSize);
+		newSock = accept(sock, (struct sockaddr*)theirAddr, &theirSize);
 		if(newSock == -1){
 			perror("accept err");
 			continue;
@@ -92,7 +96,7 @@ int main(int argc, char** argv){
 		}
 		inet_ntop(theirAddr.ss_family, addr, ipstr, sizeof(ipstr));
 		*/
-		AddrToChar(ipstr, &theirAddr);
+		AddrToChar(ipstr, theirAddr);
 		printf("Connected to %s.\n", ipstr);
 		
 		/*
@@ -117,7 +121,7 @@ int main(int argc, char** argv){
 		// Get client ISN.
 		printf("Shaking hands...\n");
 		uint32_t* buffer;
-		int numbytes = GetBuffer(buffer, newSock, HEADER_SIZE, -1);
+		int numbytes = GetBuffer(theirAddr, buffer, newSock, HEADER_SIZE, -1);
 		if(CheckRecv(numbytes, HEADER_SIZE)){
 			close(newSock);
 			continue;
@@ -132,6 +136,7 @@ int main(int argc, char** argv){
 		uint32_t theirIsn = fromPacket.seq;
 
 		bool doTransmit;
+		int opt = 1;
 		do{
 			doTransmit = false;
 
@@ -146,17 +151,18 @@ int main(int argc, char** argv){
 			}
 
 			// Wait for ACK.
-			int opt = 1;
 			if(setsockopt(newSock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) < 0){
 				perror("setsockopt err");
 				close(newSock);
 				break;
 			}
 			
-			numbytes = GetBuffer(buffer, newSock, HEADER_SIZE, -1);
+			numbytes = GetBuffer(&theirAddr, buffer, newSock, HEADER_SIZE, -1);
 			if(CheckRecv(numbytes, HEADER_SIZE)){
 				// Retransmit if timed-out.
 				if(errno == ETIMEDOUT){
+					printf("Retransmitting...\n");
+
 					doTransmit = true;
 					continue;
 				}
@@ -165,10 +171,32 @@ int main(int argc, char** argv){
 				break;
 			}
 		}while(doTransmit);
+		
+		opt = 0;
+		if(setsockopt(newSock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) < 0){
+			perror("setsockopt err");
+			close(newSock);
+			continue;
+		}
+
+		// Get ACK.
+		numbytes = GetBuffer(&theirAddr, buffer, newSock, HEADER_SIZE, -1);
+		if(CheckRecv(numbytes, HEADER_SIZE)){
+			close(newSock);
+			continue;
+		}
+
+		fromPacket = PacketDeserialize(buffer);
+		if(!(fromPacket.flags & FLAG_ACK >> 1) || fromPacket.seq != theirIsn + 1 || fromPacket.ack != lastIsn + 1){
+			printf("GetBuffer err: FLAG_SYN not set, incorrect SEQ, or incorrect ACK.");
+			close(newSock);
+			continue;
+		}
+
+		printf("Handshake complete.\n");
 
 		// Close connection and continue listening.
 		close(newSock);
-		printf("Listening...\n");
 	}
 	
 	close(sock);
