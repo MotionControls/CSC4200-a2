@@ -67,6 +67,7 @@ int LogPacket(char* log, int recv, Packet packet){
 		(packet.flags & FLAG_SYN) >> 1,
 		packet.flags & FLAG_FIN,
 		packet.length);
+	return 1;
 }
 
 /*	Timestamp()
@@ -82,13 +83,8 @@ char* Timestamp(){
 
 void AddrToChar(char* ipstr, struct sockaddr_in* info){
 	void* addr;
-	struct sockaddr* check = (struct sockaddr*)info;
-	if(check->sa_family == AF_INET){
-		addr = &(((struct sockaddr_in*)check)->sin_addr);
-	}else{
-		addr = &(((struct sockaddr_in6*)check)->sin6_addr);
-	}
-	inet_ntop(info->ss_family, addr, ipstr, sizeof(ipstr));
+	addr = &(info->sin_addr);
+	inet_ntop(info->sin_family, addr, ipstr, sizeof(ipstr));
 }
 
 int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expectedSize){
@@ -111,12 +107,14 @@ int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expec
 	return numbytes;
 }
 
-int SendBuffer(void* buffer, int sock, int size){
-	printf("\tSending buffer...\n");
+int SendBuffer(struct sockaddr_in* info, void* buffer, int sock, int size){
+	char printAddr[25];
+	printf("\tSending buffer to %s...\n", inet_ntop(info->sin_family, &(info->sin_addr.s_addr), printAddr, 25));
 
+	socklen_t tolen = sizeof(struct sockaddr);
 	int numbytes = 0;
 	do{
-		int sent = send(sock, buffer + numbytes, size, 0);
+		int sent = sendto(sock, buffer + numbytes, size, 0, (struct sockaddr*)info, tolen);
 		if(sent == -1){
 			perror("send err");
 			return -1;
@@ -143,7 +141,7 @@ bool CheckRecv(int numbytes, int size){
 bool CheckSend(int numbytes, int size){
 	if(numbytes < size){
 		perror("send err");
-		printf("\tReceived %u bytes.\n", numbytes);
+		printf("\tSent %u bytes.\n", numbytes);
 		return true;
 	}
 	

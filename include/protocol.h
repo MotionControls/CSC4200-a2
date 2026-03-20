@@ -71,7 +71,7 @@ Packet MakePacket(uint32_t seq, uint32_t ack, void* payload, uint32_t length, ui
 uint32_t* PacketSerialize(Packet packet);
 Packet PacketDeserialize(uint32_t* buffer);
 int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expectedSize);
-int SendBuffer(void* buffer, int sock, int size);
+int SendBuffer(struct sockaddr_in* addr, void* buffer, int sock, int size);
 
 // Error checking.
 bool CheckRecv(int numbytes, int size);

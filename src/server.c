@@ -24,9 +24,10 @@ int main(int argc, char** argv){
 	srand((unsigned)time(NULL) ^ getpid());
 	
 	uint32_t lastIsn;
-	struct sockaddr_in* myAddr, *theirAddr;
-	socklen_t mySize, theirSize;
-	int status, sock, newSock;
+	struct sockaddr_in* myAddr = malloc(sizeof(struct sockaddr_in));
+	struct sockaddr_in* theirAddr = malloc(sizeof(struct sockaddr_in));
+	socklen_t mySize;
+	int sock;
 	char ipstr[INET6_ADDRSTRLEN];
 	
 	/*
@@ -47,43 +48,46 @@ int main(int argc, char** argv){
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	myAddr->sin_family = AF_INET;
 	myAddr->sin_addr.s_addr = INADDR_ANY;
-	myAddr->sin_port = htons(port);
-	mySize = sizeof(myAddr);
+	myAddr->sin_port = htons(atoi(port));
+	mySize = sizeof(struct sockaddr_in);
 	
 	// Tell socket to reuse given port, even if "in use."
 	int reuse = 1;
 	if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &reuse, sizeof(int)) < 0){
 		perror("setsockopt err");
-		return 1;
+		return errno;
 	}
 	
 	// Bind socket.
 	printf("Binding socket...\n");
-	if(bind(sock, (struct sockaddr)myAddr, &mySize) != 0){
+	if(bind(sock, (struct sockaddr*)myAddr, mySize) != 0){
 		perror("bind err");
-		return 1;
+		return errno;
 	}
 
 	AddrToChar(ipstr, myAddr);
 	printf("Hosting as %s:%s.\n", ipstr, port);
 	
+	/*
 	// Listen for up to 10 connections.
 	printf("Listening...\n");
 	if(listen(sock, 10) != 0){
 		perror("listen err");
-		return 1;
+		return errno;
 	}
+	*/
 	
+	printf("Listening...\n");
 	while(1){
-		printf("Listening...\n");
-		theirSize = sizeof(theirAddr);
-		
+		/*
 		// Get connection socket.
-		newSock = accept(sock, (struct sockaddr*)theirAddr, &theirSize);
-		if(newSock == -1){
+		sock = accept(sock, (struct sockaddr*)theirAddr, &theirSize);
+		if(sock == -1){
 			perror("accept err");
+			close(sock);
 			continue;
 		}
+		*/
 		
 		// Convert connected address to char*.
 		/*
@@ -96,24 +100,24 @@ int main(int argc, char** argv){
 		}
 		inet_ntop(theirAddr.ss_family, addr, ipstr, sizeof(ipstr));
 		*/
-		AddrToChar(ipstr, theirAddr);
-		printf("Connected to %s.\n", ipstr);
+		//AddrToChar(ipstr, theirAddr);
+		//printf("Connected to %s.\n", ipstr);
 		
 		/*
 		// Get packet.
 		uint32_t packet[4];
 		time_t startTime = time(NULL);
-		int numbytes = GetBuffer(HEADER_SIZE, packet, newSock, startTime, -1);
+		int numbytes = GetBuffer(HEADER_SIZE, packet, sock, startTime, -1);
 		if(CheckRecv(numbytes, HEADER_SIZE, startTime) || ntohl(packet[0]) != 17 || ntohl(packet[2]) != sizeof(ntohl(packet[3]))){
-			close(newSock);
+			close(sock);
 			continue;
 		}
 		printf("Got packet:\n\tVersion: %i\n\tType: %i\n\tLength: %i\n\tPayload: %f\n", ntohl(packet[0]), ntohl(packet[1]), ntohl(packet[2]), (float)ntohl(packet[3]));
 		
 		// Resend packet.
-		numbytes = send(newSock, packet, HEADER_SIZE, 0);
+		numbytes = send(sock, packet, HEADER_SIZE, 0);
 		if(CheckSend(numbytes, HEADER_SIZE)){
-			close(newSock);
+			close(sock);
 			continue;
 		}
 		*/
@@ -121,16 +125,16 @@ int main(int argc, char** argv){
 		// Get client ISN.
 		printf("Shaking hands...\n");
 		uint32_t* buffer;
-		int numbytes = GetBuffer(theirAddr, buffer, newSock, HEADER_SIZE, -1);
+		int numbytes = GetBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE, -1);
 		if(CheckRecv(numbytes, HEADER_SIZE)){
-			close(newSock);
+			close(sock);
 			continue;
 		}
 
 		Packet fromPacket = PacketDeserialize(buffer);
 		if(!(fromPacket.flags & FLAG_SYN >> 1)){
 			printf("GetBuffer err: FLAG_SYN not set.");
-			close(newSock);
+			close(sock);
 			continue;
 		}
 		uint32_t theirIsn = fromPacket.seq;
@@ -144,20 +148,20 @@ int main(int argc, char** argv){
 			lastIsn = (uint32_t)rand();
 			uint32_t dummy = 0;
 			buffer = PacketSerialize(MakePacket(lastIsn, theirIsn + 1, &dummy, sizeof(uint32_t), FLAG_ACK | FLAG_SYN));
-			numbytes = SendBuffer(buffer, newSock, HEADER_SIZE);
+			numbytes = SendBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE);
 			if(CheckSend(numbytes, HEADER_SIZE)){
-				close(newSock);
+				close(sock);
 				break;
 			}
 
 			// Wait for ACK.
-			if(setsockopt(newSock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) < 0){
+			if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) < 0){
 				perror("setsockopt err");
-				close(newSock);
+				close(sock);
 				break;
 			}
 			
-			numbytes = GetBuffer(&theirAddr, buffer, newSock, HEADER_SIZE, -1);
+			numbytes = GetBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE, -1);
 			if(CheckRecv(numbytes, HEADER_SIZE)){
 				// Retransmit if timed-out.
 				if(errno == ETIMEDOUT){
@@ -167,36 +171,37 @@ int main(int argc, char** argv){
 					continue;
 				}
 				
-				close(newSock);
+				close(sock);
 				break;
 			}
 		}while(doTransmit);
 		
 		opt = 0;
-		if(setsockopt(newSock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) < 0){
+		if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) < 0){
 			perror("setsockopt err");
-			close(newSock);
+			close(sock);
 			continue;
 		}
 
 		// Get ACK.
-		numbytes = GetBuffer(&theirAddr, buffer, newSock, HEADER_SIZE, -1);
+		numbytes = GetBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE, -1);
 		if(CheckRecv(numbytes, HEADER_SIZE)){
-			close(newSock);
+			close(sock);
 			continue;
 		}
 
 		fromPacket = PacketDeserialize(buffer);
 		if(!(fromPacket.flags & FLAG_ACK >> 1) || fromPacket.seq != theirIsn + 1 || fromPacket.ack != lastIsn + 1){
 			printf("GetBuffer err: FLAG_SYN not set, incorrect SEQ, or incorrect ACK.");
-			close(newSock);
+			close(sock);
 			continue;
 		}
 
 		printf("Handshake complete.\n");
 
 		// Close connection and continue listening.
-		close(newSock);
+		close(sock);
+		printf("Listening...\n");
 	}
 	
 	close(sock);
