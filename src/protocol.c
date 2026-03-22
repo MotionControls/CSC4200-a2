@@ -1,5 +1,105 @@
 #include "protocol.h"
 
+/*	SetupSocket(...)
+...
+*/
+int SetupServerSocket(char* addr, char* port){
+	// Setup addr.
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+	if(addr == NULL) hints.ai_flags = AI_PASSIVE;
+
+	struct addrinfo* info;
+	int code = getaddrinfo(addr, port, &hints, &info);
+	if(code != 0){
+		printf("getaddrinfo err: %s\n", gai_strerror(code));
+		exit(1);
+	}
+
+	// Loop through possible bindings.
+	int sock;
+	struct addrinfo* cur;
+	char foundAddr[25];
+	for(cur = info; cur != NULL; cur = cur->ai_next){
+		printf("\tTesting address %s.\n", inet_ntop(cur->ai_family, &(cur->ai_addr), foundAddr, sizeof(foundAddr)));
+		
+		sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if(sock == -1){
+			perror("socket err");
+			continue;
+		}
+
+		int reuse = 1;
+		if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &reuse, sizeof(int)) < 0){
+			perror("setsockopt err");
+			continue;
+		}
+
+		if(bind(sock, cur->ai_addr, cur->ai_addrlen) == -1){
+			close(sock);
+			perror("bind err");
+			continue;
+		}
+
+		break;
+	}
+
+	if(cur == NULL){
+		printf("Failed to bind socket.\n");
+		exit(1);
+	}
+	
+	printf("Found address %s:%s.\n", inet_ntop(cur->ai_family, &(cur->ai_addr), foundAddr, sizeof(foundAddr)), port);
+
+	FILE* file;
+	file = fopen("addr", "w");
+	fprintf(file, foundAddr);
+	fclose(file);
+	
+	return sock;
+}
+
+/*	SetupClientSocket(...)
+...
+*/
+int SetupClientSocket(struct addrinfo* info, char* addr, char* port){
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+
+	int code = getaddrinfo(addr, port, &hints, &info);
+	if(code != 0){
+		printf("getaddrinfo err: %s\n", gai_strerror(code));
+		exit(1);
+	}
+
+	struct addrinfo* cur;
+	int sock;
+	for(cur = info; cur != NULL; cur = cur->ai_next){
+		sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if(sock == -1){
+			perror("socket err");
+			continue;
+		}
+
+		break;
+	}
+
+	if(cur == NULL){
+		printf("Failed to get socket.\n");
+		exit(1);
+	}
+
+	info = cur;
+	return sock;
+}
+
+/*	MakePacket(...)
+...
+*/
 Packet MakePacket(uint32_t seq, uint32_t ack, void* payload, uint32_t length, uint32_t flags){
 	Packet packet;
 	packet.seq = seq;
@@ -82,20 +182,16 @@ char* Timestamp(){
 }
 
 void AddrToChar(char* ipstr, struct sockaddr_in* info){
-	void* addr;
-	addr = &(info->sin_addr);
-	inet_ntop(info->sin_family, addr, ipstr, sizeof(ipstr));
+	inet_ntop(info->sin_family, &(info->sin_addr), ipstr, sizeof(ipstr));
 }
 
-int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expectedSize){
-	printf("\tGetting buffer...\n");
-
-	socklen_t fromlen = sizeof(*addr);
+int GetBuffer(struct sockaddr* info, socklen_t* infolen, void* buffer, int sock, int size, int expectedSize){
 	int numbytes = 0;
 	do{
-		int got = recvfrom(sock, buffer + numbytes, size, 0, addr, &fromlen);
+		int got = recvfrom(sock, buffer + numbytes, size, 0, info, infolen);
 		if(got == -1){
 			perror("recvfrom err");
+			if(errno == EFAULT)	exit(errno);
 			return -1;
 		}
 
@@ -107,16 +203,12 @@ int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expec
 	return numbytes;
 }
 
-int SendBuffer(struct sockaddr_in* info, void* buffer, int sock, int size){
-	char printAddr[25];
-	printf("\tSending buffer to %s...\n", inet_ntop(info->sin_family, &(info->sin_addr.s_addr), printAddr, 25));
-
-	socklen_t tolen = sizeof(struct sockaddr);
+int SendBuffer(struct addrinfo* info, void* buffer, int sock, int size){
 	int numbytes = 0;
 	do{
-		int sent = sendto(sock, buffer + numbytes, size, 0, (struct sockaddr*)info, tolen);
+		int sent = sendto(sock, buffer + numbytes, size, 0, info->ai_addr, info->ai_addrlen);
 		if(sent == -1){
-			perror("send err");
+			perror("sendto err");
 			return -1;
 		}
 
@@ -130,7 +222,6 @@ int SendBuffer(struct sockaddr_in* info, void* buffer, int sock, int size){
 
 bool CheckRecv(int numbytes, int size){
 	if(numbytes < size){
-		perror("recvfrom err");
 		printf("\tReceived %u bytes.\n", numbytes);
 		return true;
 	}
@@ -140,7 +231,6 @@ bool CheckRecv(int numbytes, int size){
 
 bool CheckSend(int numbytes, int size){
 	if(numbytes < size){
-		perror("send err");
 		printf("\tSent %u bytes.\n", numbytes);
 		return true;
 	}

@@ -48,7 +48,8 @@
  *   Bit 2 (A) — ACK  : Acknowledgment Number field is valid
  */
 
-#define HEADER_SIZE sizeof(uint32_t)*4
+#define HEADER_SIZE		sizeof(uint32_t)*4
+#define MAX_BUFFER_SIZE	1024
 
 #define FLAG_FIN	0b001
 #define FLAG_SYN	0b010
@@ -66,12 +67,16 @@ typedef struct{
 	void* payload;
 }Packet;
 
+// Setup.
+int SetupServerSocket(char* addr, char* port);
+int SetupClientSocket(struct addrinfo* info, char* addr, char* port);
+
 // Packets.
 Packet MakePacket(uint32_t seq, uint32_t ack, void* payload, uint32_t length, uint32_t flags);
 uint32_t* PacketSerialize(Packet packet);
 Packet PacketDeserialize(uint32_t* buffer);
-int GetBuffer(struct sockaddr* addr, void* buffer, int sock, int size, int expectedSize);
-int SendBuffer(struct sockaddr_in* addr, void* buffer, int sock, int size);
+int GetBuffer(struct sockaddr* info, socklen_t* infolen, void* buffer, int sock, int size, int expectedSize);
+int SendBuffer(struct addrinfo* info, void* buffer, int sock, int size);
 
 // Error checking.
 bool CheckRecv(int numbytes, int size);

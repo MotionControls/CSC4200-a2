@@ -6,3 +6,4 @@ client
 *.sublime-workspace
 /.vscode
 play
+addr
