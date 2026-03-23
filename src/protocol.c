@@ -21,9 +21,9 @@ int SetupServerSocket(char* addr, char* port){
 	// Loop through possible bindings.
 	int sock;
 	struct addrinfo* cur;
-	char foundAddr[25];
+	char foundAddr[INET_ADDRSTRLEN];
 	for(cur = info; cur != NULL; cur = cur->ai_next){
-		printf("\tTesting address %s.\n", inet_ntop(cur->ai_family, &(cur->ai_addr), foundAddr, sizeof(foundAddr)));
+		printf("\tTesting address %s.\n", inet_ntop(cur->ai_family, &(((struct sockaddr_in*)(cur->ai_addr))->sin_addr), foundAddr, INET_ADDRSTRLEN));
 		
 		sock = socket(AF_INET, SOCK_DGRAM, 0);
 		if(sock == -1){
@@ -51,49 +51,13 @@ int SetupServerSocket(char* addr, char* port){
 		exit(1);
 	}
 	
-	printf("Found address %s:%s.\n", inet_ntop(cur->ai_family, &(cur->ai_addr), foundAddr, sizeof(foundAddr)), port);
+	printf("Socket setup for %s:%s.\n", inet_ntop(cur->ai_family, &(((struct sockaddr_in*)(cur->ai_addr))->sin_addr), foundAddr, INET_ADDRSTRLEN), port);
 
 	FILE* file;
 	file = fopen("addr", "w");
 	fprintf(file, foundAddr);
 	fclose(file);
 	
-	return sock;
-}
-
-/*	SetupClientSocket(...)
-...
-*/
-int SetupClientSocket(struct addrinfo* info, char* addr, char* port){
-	struct addrinfo hints;
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_DGRAM;
-
-	int code = getaddrinfo(addr, port, &hints, &info);
-	if(code != 0){
-		printf("getaddrinfo err: %s\n", gai_strerror(code));
-		exit(1);
-	}
-
-	struct addrinfo* cur;
-	int sock;
-	for(cur = info; cur != NULL; cur = cur->ai_next){
-		sock = socket(AF_INET, SOCK_DGRAM, 0);
-		if(sock == -1){
-			perror("socket err");
-			continue;
-		}
-
-		break;
-	}
-
-	if(cur == NULL){
-		printf("Failed to get socket.\n");
-		exit(1);
-	}
-
-	info = cur;
 	return sock;
 }
 
@@ -179,10 +143,6 @@ char* Timestamp(){
 	time_t now = time(NULL);
 	strftime(buffer, 50, "%Y-%m-%d-%H-%M-%S", localtime(&now));
 	return buffer;
-}
-
-void AddrToChar(char* ipstr, struct sockaddr_in* info){
-	inet_ntop(info->sin_family, &(info->sin_addr), ipstr, sizeof(ipstr));
 }
 
 int GetBuffer(struct sockaddr* info, socklen_t* infolen, void* buffer, int sock, int size, int expectedSize){

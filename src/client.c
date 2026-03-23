@@ -27,92 +27,37 @@ int main(int argc, char** argv){
 	// Seed rand.
 	srand((unsigned)time(NULL) ^ getpid());
 
-	uint32_t myIsn;
-	struct addrinfo* theirAddr;
-	socklen_t theirSize = sizeof(struct sockaddr);
-	int sock;
-	char ipstr[INET6_ADDRSTRLEN];
+	struct addrinfo* theirAddr = malloc(sizeof(struct addrinfo));
+	//int sock = SetupClientSocket(theirAddr, serverIp, port);
 	
-	/*
-	// Create socket using given address info.
-	sock = socket(AF_INET, SOCK_DGRAM, 0);
-	theirAddr->sin_family = AF_INET;
-	theirAddr->sin_port = htons(atoi(port));
-	if(inet_aton(serverIp, &(theirAddr->sin_addr)) == 0){
-		perror("inet_aton err");
-		close(sock);
-		return errno;
-	}
-	*/
-	sock = SetupClientSocket(theirAddr, serverIp, port);
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
 
-	// Set timeout.
-	struct timeval timeOpt = {TIMEOUT_SEC, TIMEOUT_USEC};
-	if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeOpt, sizeof(struct timeval)) < 0){
-		perror("setsockopt err");
-		close(sock);
-		return errno;
+	int code = getaddrinfo(serverIp, port, &hints, &theirAddr);
+	if(code != 0){
+		printf("getaddrinfo err: %s\n", gai_strerror(code));
+		exit(1);
 	}
 
-	// Set ISN.
-	myIsn = (uint32_t)rand();
-	
-	// Connect using socket.
-	//AddrToChar(ipstr, theirAddr);
-	//printf("Connecting to %s.\n", ipstr);
-	
-	printf("Shaking hands...\n");
-	bool doTransmit;
-	int tries = 0;
-	uint32_t theirIsn;
-	char dummy = 0;
-	do{
-		if(tries == MAX_RETRIES){
-			printf("err: Max retries reached.\n");
-			close(sock);
-			return 1;
-		}
-		
-		doTransmit = false;
-	
-		// Send ISN.
-		uint32_t* buffer = PacketSerialize(MakePacket(myIsn, 0, &dummy, sizeof(dummy), FLAG_SYN));
-		int numbytes = SendBuffer(theirAddr, buffer, sock, HEADER_SIZE + sizeof(dummy));
-		if(CheckSend(numbytes, HEADER_SIZE)){
-			close(sock);
-			return errno;
-		}
+	int sock = socket(AF_INET, SOCK_DGRAM, 0);
+	if(sock == -1){
+		perror("socket err");
+		exit(errno);
+	}
 
-		// Get server ISN.
-		numbytes = GetBuffer((struct sockaddr*)theirAddr, &theirSize, buffer, sock, HEADER_SIZE, -1);
-		if(CheckRecv(numbytes, HEADER_SIZE)){
-			printf("Retransmitting...\n");
-			tries++;
-			doTransmit = true;
-			continue;
-		}
-
-		Packet fromPacket = PacketDeserialize(buffer);
-		if(!(fromPacket.flags & FLAG_SYN >> 1) || !(fromPacket.flags & FLAG_ACK >> 2) || fromPacket.ack != myIsn + 1){
-			printf("GetBuffer err: FLAG_SYN, FLAG_ACK not set, or incorrect ACK.\nRetransmitting...\n");
-			tries++;
-			doTransmit = true;
-			continue;
-		}
-		theirIsn = fromPacket.seq;
-	}while(doTransmit);
-
-	// Send ACK.
-	uint32_t* buffer = PacketSerialize(MakePacket(myIsn + 1, theirIsn + 1, &dummy, sizeof(uint32_t), FLAG_ACK));
-	int numbytes = SendBuffer(theirAddr, buffer, sock, HEADER_SIZE);
-	if(CheckSend(numbytes, HEADER_SIZE)){
-		close(sock);
+	char foundAddr[INET_ADDRSTRLEN];
+	printf("Socket setup for %s.\n", inet_ntop(theirAddr->ai_family, &(((struct sockaddr_in*)(theirAddr->ai_addr))->sin_addr), foundAddr, INET_ADDRSTRLEN));
+	
+	uint32_t buffer = 42;
+	int numbytes = sendto(sock, &buffer, sizeof(buffer), 0, theirAddr->ai_addr, theirAddr->ai_addrlen);
+	if(numbytes == -1){
+		perror("sendto err");
 		return errno;
 	}
-	printf("Handshake complete.\n");
 
 	close(sock);
-	
 	printf("Exiting...\n");
 	return 0;
 }
