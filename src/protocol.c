@@ -79,9 +79,7 @@ Packet MakePacket(uint32_t seq, uint32_t ack, void* payload, uint32_t length, ui
 	Morphs packet into byte array.
 packet 	; Packet.
 */
-uint32_t* PacketSerialize(Packet packet){
-	uint32_t* buffer = (uint32_t*)malloc(packet.length + sizeof(uint32_t)*4);
-
+void PacketSerialize(uint32_t* buffer, Packet packet){
 	uint32_t seq = htonl(packet.seq);
 	uint32_t ack = htonl(packet.ack);
 	uint32_t flags = htonl(packet.flags);
@@ -91,9 +89,7 @@ uint32_t* PacketSerialize(Packet packet){
 	memcpy(&buffer[1], &ack, sizeof(uint32_t));
 	memcpy(&buffer[2], &flags, sizeof(uint32_t));
 	memcpy(&buffer[3], &length, sizeof(uint32_t));
-	memset(&buffer[4], 1, packet.length);			// We don't care about this for sprint 1.
-
-	return buffer;
+	memcpy(&buffer[4], packet.payload, packet.length);
 }
 
 /*	PacketDeserialize(buffer)
@@ -105,11 +101,22 @@ Packet PacketDeserialize(uint32_t* buffer){
 	uint32_t ack = ntohl(buffer[1]);
 	uint32_t flags = ntohl(buffer[2]);
 	uint32_t length = ntohl(buffer[3]);
+	uint32_t payload = buffer[4];
 
-	void* payload = malloc(length);
-	memcpy(&payload, &buffer[4], length);
+	void* ptr = malloc(length);
+	memcpy(ptr, &payload, length);
 
-	return MakePacket(seq, ack, payload, length, flags);
+	return MakePacket(seq, ack, ptr, length, flags);
+}
+
+Packet HeaderDeserialize(uint32_t* buffer){
+	uint32_t seq = ntohl(buffer[0]);
+	uint32_t ack = ntohl(buffer[1]);
+	uint32_t flags = ntohl(buffer[2]);
+	uint32_t length = ntohl(buffer[3]);
+	uint32_t payload = 0;
+
+	return MakePacket(seq, ack, &payload, length, flags);
 }
 
 /*	LogPacket(log, packet)
@@ -145,28 +152,38 @@ char* Timestamp(){
 	return buffer;
 }
 
-int GetBuffer(struct sockaddr* info, socklen_t* infolen, void* buffer, int sock, int size, int expectedSize){
+int GetBuffer(struct sockaddr_storage* info, socklen_t* infolen, uint32_t* buffer, int sock){
 	int numbytes = 0;
+	int size = PACKET_SIZE;
+	bool printAddr = false;
 	do{
-		int got = recvfrom(sock, buffer + numbytes, size, 0, info, infolen);
+		int got = recvfrom(sock, (buffer + numbytes), size - numbytes, 0, (struct sockaddr*)info, infolen);
 		if(got == -1){
 			perror("recvfrom err");
 			if(errno == EFAULT)	exit(errno);
 			return -1;
 		}
 
+		if(!printAddr){
+			char foundAddr[INET_ADDRSTRLEN];
+			printf("\trecvfrom %s.\n", inet_ntop(info->ss_family, &(((struct sockaddr_in*)info)->sin_addr), foundAddr, INET_ADDRSTRLEN));
+			printAddr = true;
+		}
+
 		numbytes += got;
-		printf("\t%i / %i | %i\n", numbytes, size, expectedSize);
-	}while(numbytes < size && (expectedSize <= -1 || numbytes < expectedSize));
+		printf("\t%i / %i\n", numbytes, size);
+
+		if(numbytes >= HEADER_SIZE && size == PACKET_SIZE) size = ntohl(buffer[3]) + HEADER_SIZE;
+	}while(numbytes < size);
 	
-	printf("\tGot %i bytes.\n", numbytes);
+	printf("Fin\t%i / %i\n", numbytes, size);
 	return numbytes;
 }
 
-int SendBuffer(struct addrinfo* info, void* buffer, int sock, int size){
+int SendBuffer(struct sockaddr* info, void* buffer, int sock, int size){
 	int numbytes = 0;
 	do{
-		int sent = sendto(sock, buffer + numbytes, size, 0, info->ai_addr, info->ai_addrlen);
+		int sent = sendto(sock, buffer + numbytes, size, 0, info, sizeof(*info));
 		if(sent == -1){
 			perror("sendto err");
 			return -1;
