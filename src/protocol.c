@@ -128,20 +128,6 @@ recv	;	Assumes RECV if >0, SEND otherwise.
 packet  ;	Packet.
 */
 int LogPacket(char* log, int recv, Packet packet){
-	// We're just gonna print for the moment.
-	/*
-	printf("%s %s SEQ=%u ACK=%u %u %u %u LEN=%u\n",
-		Timestamp(),
-		(recv) ? "RECV" : "SEND",
-		packet.seq,
-		packet.ack,
-		(packet.flags & FLAG_ACK) >> 2,	// If unshifted, number shows up as >1 when set.
-		(packet.flags & FLAG_SYN) >> 1,
-		packet.flags & FLAG_FIN,
-		packet.length);
-	return 1;
-	*/
-
 	FILE* file;
 	file = fopen(log, "a");
 	fprintf(file, "%s %s SEQ=%u ACK=%u %u %u %u LEN=%u\n",

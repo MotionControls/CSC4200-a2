@@ -8,3 +8,4 @@ client
 play
 addr
 logs
+*.bin
