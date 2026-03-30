@@ -24,20 +24,27 @@ int main(){
 	*/
 
 	FILE* file;
-	file = fopen("test1.bin", "wb");
-	char* buffer = "yeppers";
-	fwrite(buffer, sizeof(char), strlen(buffer), file);
-	fclose(file);
-
-	printf("%s\n", buffer);
-	
-	file = fopen("test.jpg", "rb");
+	file = fopen("res/artofrally_1.jpg", "rb");
 	fseek(file, 0L, SEEK_END);
 	int size = ftell(file);
-	
-	fread(buffer, sizeof(char), size, file);
-	printf("%s\n", buffer);
 
+	file = fopen("res/artofrally_1.jpg", "rb");
+	uint8_t buffer[size];
+	int got = fread(buffer, sizeof(uint8_t), size, file);
+	printf("%i / %i\n", size, got);
+
+	if(ferror(file)){
+		perror("err");
+		return 1;
+	}
+
+	fclose(file);
+
+	for(int i = 0; i < 25; i++) printf("%x ", buffer[i]);
+	putchar('\n');
+
+	file = fopen("test.jpg", "wb");
+	fwrite(buffer, sizeof(uint8_t), size, file);
 	fclose(file);
 	
 	return 0;
