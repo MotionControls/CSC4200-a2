@@ -26,6 +26,7 @@ int main(int argc, char** argv){
 	int sock = SetupServerSocket("localhost", port);
 	
 	uint32_t selfIsn = (uint32_t)rand();
+	uint32_t theirIsn;
 	uint32_t* buffer;
 	while(1){
 		struct timeval opt = {0,0};
@@ -37,6 +38,7 @@ int main(int argc, char** argv){
 		struct sockaddr_storage* theirAddr = malloc(sizeof(struct sockaddr_storage));
 		socklen_t theirSize = sizeof(*theirAddr);
 		
+		// SYN+ACK packets.
 		buffer = malloc(HEADER_SIZE);
 		int numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
 		if(CheckSend(numbytes, HEADER_SIZE)) continue;
@@ -46,6 +48,8 @@ int main(int argc, char** argv){
 			printf("GetBuffer err: SYN flags incorrect.\n");
 			continue;
 		}
+
+		theirIsn = synPacket.seq;
 		LogPacket(logPath, 1, synPacket);
 		printf("Recieved SYN.\nSending ACK...\n");
 
@@ -64,6 +68,7 @@ int main(int argc, char** argv){
 				continue;
 			}
 			
+			opt = (struct timeval){0,0};
 			if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) == -1){
 				perror("setsockopt err");
 				return errno;
@@ -93,6 +98,31 @@ int main(int argc, char** argv){
 		if(tries >= MAX_RETRIES) continue;
 
 		printf("Handshake complete.\n");
+
+		// Data packets.
+		// Assume only one packet is sent for now.
+		bool trans = false;
+		do{
+			buffer = malloc(HEADER_SIZE);
+			numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
+			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
+
+			Packet packet = PacketDeserialize(buffer);
+			if(packet.seq != theirIsn + 1){
+				/*	Ask for resend.	*/
+			}
+
+			uint8_t* payload = malloc(packet.length);
+			memcpy(payload, packet.payload, packet.length);
+
+			// Get filename.
+			int nameSize = strlen((char*)payload);
+			char name[nameSize];
+			strcpy(name, (char*)payload);
+			printf("%s\n", name);
+
+			trans = true;
+		}while(!trans);
 	}
 
 	printf("Exiting...\n");

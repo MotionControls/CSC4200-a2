@@ -11,17 +11,21 @@ size_t GetFileContents(uint8_t* buffer, char* path){
 	size_t size = ftell(file);
 	rewind(file);
 
+	printf("Reading %li bytes from %s.\n", size, path);
+
 	char temp[strlen(path)];
 	strcpy(temp, path);
-	char* base = basename(base);
-
+	char* base = basename(temp);
+	
 	char* front = "FILENAME:";
-	strcat(front, base);
-	buffer = malloc(size + strlen(front));
+	char* final = malloc(strlen(front) + strlen(base));
+	strcpy(final, front);
+	strcat(final, base);
+	buffer = malloc(size + strlen(final));
 
 	printf("Reading %s...\n", base);
 
-	size_t got = fread(buffer + strlen(front), sizeof(uint8_t), size, file);
+	size_t got = fread(buffer + strlen(final), sizeof(uint8_t), size, file);
 	printf("\tRead %li of %li bytes.\n", got, size);
 	if(ferror(file) || got != size){
 		perror("fread err");

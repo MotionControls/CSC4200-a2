@@ -49,6 +49,7 @@ int main(int argc, char** argv){
 	char foundAddr[INET_ADDRSTRLEN];
 	printf("Socket setup for %s.\n", inet_ntop(theirAddr->ai_family, &(((struct sockaddr_in*)(theirAddr->ai_addr))->sin_addr), foundAddr, INET_ADDRSTRLEN));
 	
+	// SYN+ACK packets.
 	struct timeval opt = {TIMEOUT_SEC, TIMEOUT_SEC};
 	if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &opt, sizeof(opt)) == -1){
 		perror("setsockopt err");
@@ -56,6 +57,7 @@ int main(int argc, char** argv){
 	}
 
 	uint32_t selfIsn = (uint32_t)rand();
+	uint32_t curSeq;
 
 	Packet synackPacket;
 	char* dummy = "dummy";
@@ -92,24 +94,63 @@ int main(int argc, char** argv){
 			transFail = true;
 			continue;
 		}
+
+		curSeq = synackPacket.seq;
 	}while(transFail);
 
 	printf("Sending ACK...\n");
-	Packet ackPacket = MakePacket(selfIsn + 1, synackPacket.seq + 1, dummy, strlen(dummy), FLAG_ACK);
+	Packet ackPacket = MakePacket(selfIsn + 1, curSeq++, dummy, strlen(dummy), FLAG_ACK);
 	buffer = malloc(HEADER_SIZE + ackPacket.length);
 	PacketSerialize(buffer, ackPacket);
 	int numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, HEADER_SIZE + ackPacket.length);
 	if(CheckSend(numbytes, HEADER_SIZE + ackPacket.length)) return errno;
 	LogPacket(logPath, 0, ackPacket);
 
-	printf("Handshake complete.\n");
+	printf("Handshake complete.\nSending file...\n");
 
+	// Data packets.
 	uint8_t* fileBuffer;
 	size_t fileSize = GetFileContents(fileBuffer, filePath);
-	if(fileSize > PACKET_SIZE){
-		// Split & loop.
+	if((fileSize + HEADER_SIZE) > PACKET_SIZE){
+		printf("\tFile too big. Splitting...\n");
+		int packets = (HEADER_SIZE + SPLITE_SIZE) / fileSize;
+		tries = -1;
+		do{
+			tries++;
+
+			uint8_t* split = malloc(SPLITE_SIZE);
+			memcpy(split, fileBuffer + (packets*SPLITE_SIZE), SPLITE_SIZE);
+			
+			Packet packet = MakePacket(selfIsn + 1, curSeq + SPLITE_SIZE, split, SPLITE_SIZE, 0);
+			buffer = malloc(HEADER_SIZE + SPLITE_SIZE);
+			PacketSerialize(buffer, packet);
+			numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, PACKET_SIZE + SPLITE_SIZE);
+			if(CheckSend(numbytes, HEADER_SIZE + SPLITE_SIZE)){
+				if(tries >= MAX_RETRIES)	return errno;
+				else						continue;
+			}
+			LogPacket(logPath, 0, packet);
+
+			packets--;
+		}while(packets > 0);
 	}else{
-		// Send.
+		tries = -1;
+		bool sent = false;
+		Packet packet;
+		do{
+			tries++;
+			
+			packet = MakePacket(selfIsn + 1, curSeq + fileSize, fileBuffer, fileSize, 0);
+			buffer = malloc(HEADER_SIZE + fileSize);
+			PacketSerialize(buffer, packet);
+			numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, PACKET_SIZE + fileSize);
+			if(CheckSend(numbytes, HEADER_SIZE + fileSize)){
+				if(tries >= MAX_RETRIES)	return errno;
+				else						continue;
+			}
+			sent = true;
+		}while(!sent);
+		LogPacket(logPath, 0, packet);
 	}
 
 	close(sock);
