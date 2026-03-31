@@ -28,7 +28,6 @@ int main(int argc, char** argv){
 	srand((unsigned)time(NULL) ^ getpid());
 
 	struct addrinfo* theirAddr = malloc(sizeof(struct addrinfo));
-	//int sock = SetupClientSocket(theirAddr, serverIp, port);
 	
 	struct addrinfo hints;
 	memset(&hints, 0, sizeof(hints));
@@ -104,6 +103,14 @@ int main(int argc, char** argv){
 	LogPacket(logPath, 0, ackPacket);
 
 	printf("Handshake complete.\n");
+
+	uint8_t* fileBuffer;
+	size_t fileSize = GetFileContents(fileBuffer, filePath);
+	if(fileSize > PACKET_SIZE){
+		// Split & loop.
+	}else{
+		// Send.
+	}
 
 	close(sock);
 	printf("Exiting...\n");

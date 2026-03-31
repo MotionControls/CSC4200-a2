@@ -1,5 +1,36 @@
 #include "protocol.h"
 
+/*	GetFileContents(buffer, file)
+	Puts the raw contents of file into buffer.
+	Returns the size of the file in bytes.
+*/
+size_t GetFileContents(uint8_t* buffer, char* path){
+	FILE* file;
+	file = fopen(path, "rb");
+	fseek(file, 0L, SEEK_END);
+	size_t size = ftell(file);
+	rewind(file);
+
+	char temp[strlen(path)];
+	strcpy(temp, path);
+	char* base = basename(base);
+
+	char* front = "FILENAME:";
+	strcat(front, base);
+	buffer = malloc(size + strlen(front));
+
+	printf("Reading %s...\n", base);
+
+	size_t got = fread(buffer + strlen(front), sizeof(uint8_t), size, file);
+	printf("\tRead %li of %li bytes.\n", got, size);
+	if(ferror(file) || got != size){
+		perror("fread err");
+		exit(errno);
+	}
+
+	return size;
+}
+
 /*	SetupSocket(...)
 ...
 */

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <time.h>
+#include <libgen.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -70,6 +71,9 @@ typedef struct{
 // Setup.
 int SetupServerSocket(char* addr, char* port);
 int SetupClientSocket(struct addrinfo* info, char* addr, char* port);
+
+// File I/O.
+size_t GetFileContents(uint8_t* buffer, char* file);
 
 // Packets.
 Packet MakePacket(uint32_t seq, uint32_t ack, void* payload, uint32_t length, uint32_t flags);
