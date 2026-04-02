@@ -39,7 +39,7 @@ int main(int argc, char** argv){
 		socklen_t theirSize = sizeof(*theirAddr);
 		
 		// SYN+ACK packets.
-		buffer = malloc(HEADER_SIZE);
+		buffer = malloc(PACKET_SIZE);
 		int numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
 		if(CheckSend(numbytes, HEADER_SIZE)) continue;
 
@@ -84,7 +84,7 @@ int main(int argc, char** argv){
 				return errno;
 			}
 
-			buffer = malloc(HEADER_SIZE);
+			buffer = malloc(PACKET_SIZE);
 			numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
 			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
 			
@@ -100,29 +100,50 @@ int main(int argc, char** argv){
 		printf("Handshake complete.\n");
 
 		// Data packets.
-		// Assume only one packet is sent for now.
-		bool trans = false;
+		uint32_t exSeq = synackPacket.seq + 1;
+		char nameBuffer[200];
+		int packets = 0;
+		PayloadComp* compHead = malloc(sizeof(PayloadComp));
+		PayloadComp* compCur = compHead;
 		do{
-			buffer = malloc(HEADER_SIZE);
+			buffer = malloc(PACKET_SIZE);
 			numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
 			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
 
 			Packet packet = PacketDeserialize(buffer);
-			if(packet.seq != theirIsn + 1){
+			if(packet.seq != exSeq){
 				/*	Ask for resend.	*/
 			}
 
-			uint8_t* payload = malloc(packet.length);
+			uint32_t* payload = malloc(packet.length);
 			memcpy(payload, packet.payload, packet.length);
 
-			// Get filename.
-			int nameSize = strlen((char*)payload);
-			char name[nameSize];
-			strcpy(name, (char*)payload);
-			printf("%s\n", name);
+			if(packets == 0){
+				// Get filename.
+				int nameSize = strlen((char*)payload);
+				strcpy(nameBuffer, (char*)payload);
+				printf("%s\n", nameBuffer);
 
-			trans = true;
-		}while(!trans);
+				// Store payload.
+				compCur->payload = payload + nameSize;
+				compCur->size = packet.length - nameSize;
+			}else{
+				PayloadComp* cur = malloc(sizeof(*compCur));
+				cur->payload = payload;
+				cur->size = packet.length;
+				compCur->next = cur;
+			}
+
+			// Send ACK.
+			packet = MakePacket(0, exSeq, 0, 0, FLAG_ACK);
+			buffer = malloc(HEADER_SIZE);
+			PacketSerialize(buffer, packet);
+			numbytes = SendBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE);
+			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
+			
+			exSeq++;
+			packets++;
+		}while(1);
 	}
 
 	printf("Exiting...\n");

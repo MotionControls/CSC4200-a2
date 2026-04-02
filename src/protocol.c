@@ -137,7 +137,7 @@ Packet PacketDeserialize(uint32_t* buffer){
 	uint32_t flags = ntohl(buffer[2]);
 	uint32_t length = ntohl(buffer[3]);
 	uint32_t payload = buffer[4];
-
+	
 	void* ptr = malloc(length);
 	memcpy(ptr, &payload, length);
 

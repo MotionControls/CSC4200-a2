@@ -28,6 +28,7 @@ int main(int argc, char** argv){
 	srand((unsigned)time(NULL) ^ getpid());
 
 	struct addrinfo* theirAddr = malloc(sizeof(struct addrinfo));
+	socklen_t theirSize = sizeof(*theirAddr);
 	
 	struct addrinfo hints;
 	memset(&hints, 0, sizeof(hints));
@@ -82,7 +83,6 @@ int main(int argc, char** argv){
 		LogPacket(logPath, 0, synPacket);
 
 		buffer = malloc(HEADER_SIZE);
-		socklen_t theirSize = sizeof(*theirAddr);
 		numbytes = GetBuffer((struct sockaddr*)theirAddr->ai_addr, &theirSize, buffer, sock);
 		if(CheckRecv(numbytes, HEADER_SIZE)){transFail = true; continue;}
 		printf("Recieved ACK.\n");
@@ -112,27 +112,40 @@ int main(int argc, char** argv){
 	uint8_t* fileBuffer;
 	size_t fileSize = GetFileContents(fileBuffer, filePath);
 	if((fileSize + HEADER_SIZE) > PACKET_SIZE){
-		printf("\tFile too big. Splitting...\n");
-		int packets = (HEADER_SIZE + SPLITE_SIZE) / fileSize;
-		tries = -1;
+		int packets = fileSize / (HEADER_SIZE + SPLITE_SIZE);
+		int sent = 0;
+		printf("File too big. Splitting into %i packets...\n", packets);
+		tries = 0;
 		do{
-			tries++;
-
+			// Send packet.
+			printf("\tSending packet %i.\n", sent + 1);
 			uint8_t* split = malloc(SPLITE_SIZE);
-			memcpy(split, fileBuffer + (packets*SPLITE_SIZE), SPLITE_SIZE);
-			
+			memcpy(split, fileBuffer + (sent*SPLITE_SIZE), SPLITE_SIZE);
+
 			Packet packet = MakePacket(selfIsn + 1, curSeq + SPLITE_SIZE, split, SPLITE_SIZE, 0);
 			buffer = malloc(HEADER_SIZE + SPLITE_SIZE);
 			PacketSerialize(buffer, packet);
-			numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, PACKET_SIZE + SPLITE_SIZE);
+			numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, HEADER_SIZE + SPLITE_SIZE);
 			if(CheckSend(numbytes, HEADER_SIZE + SPLITE_SIZE)){
+				tries++;
 				if(tries >= MAX_RETRIES)	return errno;
 				else						continue;
 			}
 			LogPacket(logPath, 0, packet);
 
-			packets--;
-		}while(packets > 0);
+			// Receive ACK.
+			buffer = malloc(HEADER_SIZE);
+			numbytes = GetBuffer((struct sockaddr*)theirAddr->ai_addr, &theirSize, buffer, sock);
+			if(CheckRecv(numbytes, HEADER_SIZE)){
+				tries++;
+				if(tries >= MAX_RETRIES)	return errno;
+				else						continue;
+			}
+			packet = PacketDeserialize(buffer);
+			LogPacket(logPath, 1, packet);
+
+			sent++;
+		}while(sent <= packets);
 	}else{
 		tries = -1;
 		bool sent = false;

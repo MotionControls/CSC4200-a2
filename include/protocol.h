@@ -50,8 +50,8 @@
  */
 
 #define HEADER_SIZE		sizeof(uint32_t)*4
-#define PACKET_SIZE		65535
-#define SPLITE_SIZE		HEADER_SIZE
+#define PACKET_SIZE		212992
+#define SPLITE_SIZE		PACKET_SIZE/4
 
 #define FLAG_FIN	0b001
 #define FLAG_SYN	0b010
@@ -68,6 +68,12 @@ typedef struct{
 	uint32_t length;
 	void* payload;
 }Packet;
+
+typedef struct PayloadComp{
+	void* payload;
+	size_t size;
+	struct PayloadComp* next;
+}PayloadComp;
 
 // Setup.
 int SetupServerSocket(char* addr, char* port);
