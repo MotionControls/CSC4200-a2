@@ -53,8 +53,7 @@ int main(int argc, char** argv){
 		LogPacket(logPath, 1, synPacket);
 		printf("Recieved SYN.\nSending ACK...\n");
 
-		char* dummy = "dummy";
-		Packet synackPacket = MakePacket(selfIsn, synPacket.seq + 1, dummy, strlen(dummy), FLAG_ACK | FLAG_SYN);
+		Packet synackPacket = MakePacket(selfIsn, synPacket.seq + 1, 0, 0, FLAG_ACK | FLAG_SYN);
 		buffer = malloc(HEADER_SIZE + synackPacket.length);
 		PacketSerialize(buffer, synackPacket);
 
@@ -97,12 +96,13 @@ int main(int argc, char** argv){
 		};
 		if(tries >= MAX_RETRIES) continue;
 
-		printf("Handshake complete.\n");
+		printf("Handshake complete.\nWaiting for data...\n");
 
 		// Data packets.
 		uint32_t exSeq = synackPacket.seq + 1;
 		char nameBuffer[200];
 		int packets = 0;
+		bool finished = false;
 		PayloadComp* compHead = malloc(sizeof(PayloadComp));
 		PayloadComp* compCur = compHead;
 		do{
@@ -111,6 +111,7 @@ int main(int argc, char** argv){
 			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
 
 			Packet packet = PacketDeserialize(buffer);
+			LogPacket(logPath, 1, packet);
 			if(packet.seq != exSeq){
 				/*	Ask for resend.	*/
 			}
@@ -122,7 +123,7 @@ int main(int argc, char** argv){
 				// Get filename.
 				int nameSize = strlen((char*)payload);
 				strcpy(nameBuffer, (char*)payload);
-				printf("%s\n", nameBuffer);
+				printf("Filename: %s\n", nameBuffer);
 
 				// Store payload.
 				compCur->payload = payload + nameSize;
@@ -135,15 +136,18 @@ int main(int argc, char** argv){
 			}
 
 			// Send ACK.
-			packet = MakePacket(0, exSeq, 0, 0, FLAG_ACK);
+			printf("Sending ACK %i.\n", packets);
+			Packet ackPacket = MakePacket(0, exSeq, 0, 0, FLAG_ACK);
 			buffer = malloc(HEADER_SIZE);
-			PacketSerialize(buffer, packet);
+			PacketSerialize(buffer, ackPacket);
 			numbytes = SendBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE);
 			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
+			LogPacket(logPath, 0, ackPacket);
 			
+			finished = (packet.flags == FLAG_FIN);
 			exSeq++;
 			packets++;
-		}while(1);
+		}while(!finished);
 	}
 
 	printf("Exiting...\n");

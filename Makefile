@@ -1,6 +1,8 @@
 CC      = gcc
-CFLAGS  = -Wall -Wextra -g -Iinclude
-LDFLAGS =
+#CFLAGS  = -Wall -Wextra -g -Iinclude
+CFLAGS  = -Wall -Wextra -g -Iinclude -ggdb3
+#LDFLAGS =
+LDFLAGS = -lm
 
 OBJ_DIR = obj
 SRC     = src

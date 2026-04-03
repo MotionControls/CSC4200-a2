@@ -21,7 +21,8 @@ size_t GetFileContents(uint8_t* buffer, char* path){
 	char* final = malloc(strlen(front) + strlen(base));
 	strcpy(final, front);
 	strcat(final, base);
-	buffer = malloc(size + strlen(final));
+	int totalSize = size + strlen(final);
+	buffer = malloc(totalSize);
 
 	printf("Reading %s...\n", base);
 
@@ -32,7 +33,8 @@ size_t GetFileContents(uint8_t* buffer, char* path){
 		exit(errno);
 	}
 
-	return size;
+	free(final);
+	return totalSize;
 }
 
 /*	SetupSocket(...)
@@ -124,7 +126,7 @@ void PacketSerialize(uint32_t* buffer, Packet packet){
 	memcpy(&buffer[1], &ack, sizeof(uint32_t));
 	memcpy(&buffer[2], &flags, sizeof(uint32_t));
 	memcpy(&buffer[3], &length, sizeof(uint32_t));
-	memcpy(&buffer[4], packet.payload, packet.length);
+	if(length > 0) memcpy(&buffer[4], packet.payload, packet.length);
 }
 
 /*	PacketDeserialize(buffer)
@@ -136,11 +138,12 @@ Packet PacketDeserialize(uint32_t* buffer){
 	uint32_t ack = ntohl(buffer[1]);
 	uint32_t flags = ntohl(buffer[2]);
 	uint32_t length = ntohl(buffer[3]);
-	uint32_t payload = buffer[4];
+	
+	if(length <= 0) return MakePacket(seq, ack, 0, 0, flags);
 	
 	void* ptr = malloc(length);
-	memcpy(ptr, &payload, length);
-
+	memcpy(ptr, &(buffer[4]), length);
+	
 	return MakePacket(seq, ack, ptr, length, flags);
 }
 
@@ -193,7 +196,7 @@ char* Timestamp(){
 int GetBuffer(struct sockaddr_storage* info, socklen_t* infolen, uint32_t* buffer, int sock){
 	int numbytes = 0;
 	int size = PACKET_SIZE;
-	bool printAddr = false;
+	bool printedAddr = false;
 	do{
 		int got = recvfrom(sock, (buffer + numbytes), size - numbytes, 0, (struct sockaddr*)info, infolen);
 		if(got == -1){
@@ -202,16 +205,19 @@ int GetBuffer(struct sockaddr_storage* info, socklen_t* infolen, uint32_t* buffe
 			return -1;
 		}
 
-		if(!printAddr){
+		if(!printedAddr){
 			char foundAddr[INET_ADDRSTRLEN];
 			printf("\trecvfrom %s.\n", inet_ntop(info->ss_family, &(((struct sockaddr_in*)info)->sin_addr), foundAddr, INET_ADDRSTRLEN));
-			printAddr = true;
+			printedAddr = true;
 		}
 
 		numbytes += got;
 		printf("\t%i / %i\n", numbytes, size);
 
-		if(numbytes >= HEADER_SIZE && size == PACKET_SIZE) size = ntohl(buffer[3]) + HEADER_SIZE;
+		if(numbytes >= HEADER_SIZE && size == PACKET_SIZE){
+			size = ntohl(buffer[3]) + HEADER_SIZE;
+			printf("\tNew size: %i.\n", size);
+		}
 	}while(numbytes < size);
 	
 	printf("Fin\t%i / %i\n", numbytes, size);

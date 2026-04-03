@@ -4,48 +4,54 @@ int main(){
 	// Seeding rand.
 	srand((unsigned)time(NULL) ^ getpid());
 
-	/*
-	char* payload1 = "Hello World!";
-	Packet packet1 = MakePacket(42, 69, (void*)payload1, strlen(payload1), 0);
-	uint32_t* buffer = malloc(packet1.length + sizeof(Packet));
-	PacketSerialize(buffer, packet1);
-	LogPacket("", 0, packet1);
-	
-	char* test = malloc(packet1.length);
-	memcpy(test, packet1.payload, packet1.length);
-	test[packet1.length] = '\0';
-	printf("%s\n", test);
+	char* path = "res/artofrally_1.jpg";
 
-	Packet packet2 = PacketDeserialize(buffer);
-	LogPacket("", 1, packet2);
-	test = malloc(packet2.length);
-	memcpy(test, packet2.payload, packet2.length);
-	printf("%s\n", test);
+	/*
+	FILE* file;
+	file = fopen(path, "rb");
+	fseek(file, 0L, SEEK_END);
+	size_t size = ftell(file);
+	rewind(file);
+
+	printf("Reading %li bytes.\n", size);
+
+	char temp[strlen(path)];
+	strcpy(temp, path);
+	char* base = basename(temp);
+	
+	char* front = "FILENAME:";
+	char* final = malloc(strlen(front) + strlen(base));
+	strcpy(final, front);
+	strcat(final, base);
+	int totalSize = size + strlen(final);
+	uint8_t* buffer = malloc(totalSize);
+
+	printf("Reading %s...\n", base);
+
+	size_t got = fread(buffer + strlen(final), sizeof(uint8_t), size, file);
+	printf("\tRead %li of %li bytes.\n", got, size);
+	if(ferror(file) || got != size){
+		perror("fread err");
+		return errno;
+	}
 	*/
 
-	FILE* file;
-	file = fopen("res/artofrally_1.jpg", "rb");
-	fseek(file, 0L, SEEK_END);
-	int size = ftell(file);
+	uint8_t* buffer = malloc(PACKET_SIZE);
+	size_t totalSize = GetFileContents(buffer, path);
 
-	file = fopen("res/artofrally_1.jpg", "rb");
-	uint8_t buffer[size];
-	int got = fread(buffer, sizeof(uint8_t), size, file);
-	printf("%i / %i\n", size, got);
+	int packets = (int)ceil(1.0f * totalSize / (HEADER_SIZE + SPLITE_SIZE));
+	int sent = 0;
+	
+	while(sent < packets){
+		int realSize = ((sent * SPLITE_SIZE) + SPLITE_SIZE > totalSize) ? totalSize - (sent * SPLITE_SIZE) : SPLITE_SIZE;
+		
+		uint8_t* tempBuffer = malloc(realSize);
+		memcpy(tempBuffer, buffer + (sent*SPLITE_SIZE), realSize);
+		
+		for(int i = 0; i < realSize; i++) printf("%i\t%i $ %i $ %i\n", sent, *(tempBuffer + i), i, i + (sent * SPLITE_SIZE));
 
-	if(ferror(file)){
-		perror("err");
-		return 1;
+		sent++;
 	}
-
-	fclose(file);
-
-	for(int i = 0; i < 25; i++) printf("%x ", buffer[i]);
-	putchar('\n');
-
-	file = fopen("test.jpg", "wb");
-	fwrite(buffer, sizeof(uint8_t), size, file);
-	fclose(file);
 	
 	return 0;
 }

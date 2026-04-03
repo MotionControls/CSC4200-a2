@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <libgen.h>
+#include <math.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
