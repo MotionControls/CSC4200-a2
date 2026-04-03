@@ -103,8 +103,7 @@ int main(int argc, char** argv){
 		char nameBuffer[200];
 		int packets = 0;
 		bool finished = false;
-		PayloadComp* compHead = malloc(sizeof(PayloadComp));
-		PayloadComp* compCur = compHead;
+		FILE* download;
 		do{
 			buffer = malloc(PACKET_SIZE);
 			numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
@@ -124,6 +123,9 @@ int main(int argc, char** argv){
 				int nameSize = strlen((char*)payload);
 				strcpy(nameBuffer, (char*)payload);
 				printf("Filename: %s\n", nameBuffer);
+
+				// Open file.
+				
 
 				// Store payload.
 				compCur->payload = payload + nameSize;

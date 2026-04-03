@@ -4,7 +4,7 @@
 	Puts the raw contents of file into buffer.
 	Returns the size of the file in bytes.
 */
-size_t GetFileContents(uint8_t* buffer, char* path){
+size_t GetFileContents(void** buffer, char* path){
 	FILE* file;
 	file = fopen(path, "rb");
 	fseek(file, 0L, SEEK_END);
@@ -16,24 +16,23 @@ size_t GetFileContents(uint8_t* buffer, char* path){
 	char temp[strlen(path)];
 	strcpy(temp, path);
 	char* base = basename(temp);
-	
 	char* front = "FILENAME:";
-	char* final = malloc(strlen(front) + strlen(base));
+
+	char final[strlen(front) + strlen(base)];
 	strcpy(final, front);
 	strcat(final, base);
-	int totalSize = size + strlen(final);
-	buffer = malloc(totalSize);
+	size_t totalSize = size + strlen(final);
+	
+	*buffer = malloc(totalSize);
+	strcpy(*buffer, final);
 
-	printf("Reading %s...\n", base);
-
-	size_t got = fread(buffer + strlen(final), sizeof(uint8_t), size, file);
+	size_t got = fread(*buffer + strlen(final) + 1, sizeof(uint8_t), size, file);
 	printf("\tRead %li of %li bytes.\n", got, size);
 	if(ferror(file) || got != size){
 		perror("fread err");
 		exit(errno);
 	}
 
-	free(final);
 	return totalSize;
 }
 
