@@ -29,7 +29,7 @@ int main(){
 		int realSize = ((sent * SPLITE_SIZE) + SPLITE_SIZE > (int)totalSize) ? totalSize - (sent * SPLITE_SIZE) : SPLITE_SIZE;
 
 		uint8_t* tempBuffer = malloc(realSize);
-		memcpy(tempBuffer, buffer +  + filenameSize + 1 + (sent*SPLITE_SIZE), realSize);
+		memcpy(tempBuffer, buffer + filenameSize + 1 + (sent*SPLITE_SIZE), realSize);
 		fwrite(tempBuffer, sizeof(uint8_t), realSize, download);
 		
 		//for(int i = 0; i < realSize; i++) printf("%i\t%i $ %i $ %i\n", sent, *(tempBuffer + i), i, i + (sent * SPLITE_SIZE));

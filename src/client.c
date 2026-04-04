@@ -109,70 +109,49 @@ int main(int argc, char** argv){
 
 	// Data packets.
 	uint8_t* fileBuffer = malloc(PACKET_SIZE);
-	size_t fileSize = GetFileContents(fileBuffer, filePath);
-	if((fileSize + HEADER_SIZE) > PACKET_SIZE){
-		int packets = (int)ceil(1.0f * fileSize / (HEADER_SIZE + SPLITE_SIZE));
-		int sent = 0;
-		printf("File too big. Splitting into %i packets...\n", packets);
-		tries = 0;
-		uint8_t* split = malloc(SPLITE_SIZE);
-		for(int i = 0; i < fileSize; i++) printf("\t%i $ %i\n", *(fileBuffer + i), i);
-		do{
-			// Send packet.
-			int offset = (sent * SPLITE_SIZE);
-			int finalSize = (fileSize - offset < SPLITE_SIZE) ? fileSize - offset : SPLITE_SIZE;
-			printf("Sending packet %i with offset %i to %i (%i).\n", sent, offset, offset + finalSize - 1, finalSize);
+	size_t fileSize = GetFileContents(&fileBuffer, filePath);
+	int packets = (int)ceil(1.0f * fileSize / (HEADER_SIZE + SPLITE_SIZE));
+	int sent = 0;
+	printf("File too big. Splitting into %i packets...\n", packets);
+	tries = 0;
+	uint8_t* split = malloc(SPLITE_SIZE);
+	do{
+		// Send packet.
+		int offset = (sent * SPLITE_SIZE);
+		int finalSize = (fileSize - offset < SPLITE_SIZE) ? fileSize - offset : SPLITE_SIZE;
+		printf("Sending packet %i with offset %i to %i (%i).\n", sent, offset, offset + finalSize - 1, finalSize);
 
-			memcpy(split, fileBuffer + offset, finalSize);
-			Packet packet = MakePacket(
-				selfIsn + 1,
-				curSeq + finalSize,
-				split, finalSize,
-				(sent + 1 == packets) ? FLAG_FIN : 0);
-			buffer = realloc(buffer, HEADER_SIZE + finalSize);
-			PacketSerialize(buffer, packet);
-			numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, HEADER_SIZE + finalSize);
-			if(CheckSend(numbytes, HEADER_SIZE + finalSize)){
-				tries++;
-				if(tries >= MAX_RETRIES)	return errno;
-				else						continue;
-			}
-			LogPacket(logPath, 0, packet);
-
-			// Receive ACK.
-			printf("Getting ACK %i...\n", sent);
-			buffer = realloc(buffer, HEADER_SIZE);
-			numbytes = GetBuffer((struct sockaddr*)theirAddr->ai_addr, &theirSize, buffer, sock);
-			if(CheckRecv(numbytes, HEADER_SIZE)){
-				tries++;
-				if(tries >= MAX_RETRIES)	return errno;
-				else						continue;
-			}
-			packet = PacketDeserialize(buffer);
-			LogPacket(logPath, 1, packet);
-
-			sent++;
-		}while(sent <= packets);
-		free(split);
-	}else{
-		tries = -1;
-		bool sent = false;
-		Packet packet;
-		do{
+		memcpy(split, fileBuffer + offset, finalSize);
+		Packet packet = MakePacket(
+			selfIsn + 1,
+			curSeq + finalSize,
+			split, finalSize,
+			(sent + 1 == packets) ? FLAG_FIN : 0);
+		buffer = realloc(buffer, HEADER_SIZE + finalSize);
+		PacketSerialize(buffer, packet);
+		numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, HEADER_SIZE + finalSize);
+		if(CheckSend(numbytes, HEADER_SIZE + finalSize)){
 			tries++;
-			
-			packet = MakePacket(selfIsn + 1, curSeq + fileSize, fileBuffer, fileSize, 0);
-			buffer = malloc(HEADER_SIZE + fileSize);
-			PacketSerialize(buffer, packet);
-			numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, PACKET_SIZE + fileSize);
-			if(CheckSend(numbytes, HEADER_SIZE + fileSize)){
-				if(tries >= MAX_RETRIES)	return errno;
-				else						continue;
-			}
-			sent = true;
-		}while(!sent);
+			if(tries >= MAX_RETRIES)	return errno;
+			else						continue;
+		}
 		LogPacket(logPath, 0, packet);
-	}
+
+		// Receive ACK.
+		printf("Getting ACK %i...\n", sent);
+		buffer = realloc(buffer, HEADER_SIZE);
+		numbytes = GetBuffer((struct sockaddr*)theirAddr->ai_addr, &theirSize, buffer, sock);
+		if(CheckRecv(numbytes, HEADER_SIZE)){
+			tries++;
+			if(tries >= MAX_RETRIES)	return errno;
+			else						continue;
+		}
+		packet = PacketDeserialize(buffer);
+		LogPacket(logPath, 1, packet);
+
+		sent++;
+	}while(sent <= packets);
+	free(split);
 
 	close(sock);
 	printf("Exiting...\n");

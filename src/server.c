@@ -100,7 +100,6 @@ int main(int argc, char** argv){
 
 		// Data packets.
 		uint32_t exSeq = synackPacket.seq + 1;
-		char nameBuffer[200];
 		int packets = 0;
 		bool finished = false;
 		FILE* download;
@@ -115,26 +114,22 @@ int main(int argc, char** argv){
 				/*	Ask for resend.	*/
 			}
 
-			uint32_t* payload = malloc(packet.length);
-			memcpy(payload, packet.payload, packet.length);
-
 			if(packets == 0){
 				// Get filename.
-				int nameSize = strlen((char*)payload);
-				strcpy(nameBuffer, (char*)payload);
-				printf("Filename: %s\n", nameBuffer);
+				size_t nameSize = strlen((char*)(packet.payload));
+				char* front = "downloads/";
+				char nameBuffer[strlen(front) + nameSize];
+				strcpy(nameBuffer, front);
+				strcat(nameBuffer, (char*)(packet.payload + FILESTR_SIZE));
+				printf("Downloading to: %s\n", nameBuffer);
 
 				// Open file.
-				
+				download = fopen(nameBuffer, "wb");
 
 				// Store payload.
-				compCur->payload = payload + nameSize;
-				compCur->size = packet.length - nameSize;
+				fwrite(packet.payload + nameSize + 1, sizeof(uint8_t), packet.length - nameSize - 1, download);
 			}else{
-				PayloadComp* cur = malloc(sizeof(*compCur));
-				cur->payload = payload;
-				cur->size = packet.length;
-				compCur->next = cur;
+				fwrite(packet.payload, sizeof(uint8_t), packet.length, download);
 			}
 
 			// Send ACK.
@@ -143,13 +138,14 @@ int main(int argc, char** argv){
 			buffer = malloc(HEADER_SIZE);
 			PacketSerialize(buffer, ackPacket);
 			numbytes = SendBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE);
-			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
+			if(CheckSend(numbytes, HEADER_SIZE)) continue;
 			LogPacket(logPath, 0, ackPacket);
 			
 			finished = (packet.flags == FLAG_FIN);
 			exSeq++;
 			packets++;
 		}while(!finished);
+		fclose(download);
 	}
 
 	printf("Exiting...\n");
