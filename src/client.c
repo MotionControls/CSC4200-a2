@@ -94,11 +94,11 @@ int main(int argc, char** argv){
 			continue;
 		}
 
-		curSeq = synackPacket.seq;
+		curSeq = selfIsn + 1;
 	}while(transFail);
 
 	printf("Sending ACK...\n");
-	Packet ackPacket = MakePacket(selfIsn + 1, curSeq++, 0, 0, FLAG_ACK);
+	Packet ackPacket = MakePacket(synackPacket.seq, curSeq, 0, 0, FLAG_ACK);
 	buffer = realloc(buffer, HEADER_SIZE);
 	PacketSerialize(buffer, ackPacket);
 	int numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, HEADER_SIZE);
@@ -118,13 +118,13 @@ int main(int argc, char** argv){
 	do{
 		// Send packet.
 		int offset = (sent * SPLITE_SIZE);
-		int finalSize = (fileSize - offset < SPLITE_SIZE) ? fileSize - offset : SPLITE_SIZE;
+		int finalSize = (fileSize - offset < SPLITE_SIZE) ? fileSize - offset + 1 : SPLITE_SIZE;
 		printf("Sending packet %i with offset %i to %i (%i).\n", sent, offset, offset + finalSize - 1, finalSize);
 
 		memcpy(split, fileBuffer + offset, finalSize);
 		Packet packet = MakePacket(
-			selfIsn + 1,
-			curSeq + finalSize,
+			curSeq,
+			0,
 			split, finalSize,
 			(sent + 1 == packets) ? FLAG_FIN : 0);
 		buffer = realloc(buffer, HEADER_SIZE + finalSize);
@@ -146,11 +146,19 @@ int main(int argc, char** argv){
 			if(tries >= MAX_RETRIES)	return errno;
 			else						continue;
 		}
-		packet = PacketDeserialize(buffer);
-		LogPacket(logPath, 1, packet);
+		
+		Packet ackPacket = PacketDeserialize(buffer);
+		LogPacket(logPath, 1, ackPacket);
+		if(ackPacket.flags != FLAG_ACK && ackPacket.ack != packet.length + curSeq){
+			printf("GetBuffer err: ACK flags incorrect or SEQ non-matching.\n");
+			tries++;
+			if(tries >= MAX_RETRIES)	return errno;
+			else						continue;
+		}
 
+		curSeq += packet.length;
 		sent++;
-	}while(sent <= packets);
+	}while(sent < packets);
 	free(split);
 
 	close(sock);

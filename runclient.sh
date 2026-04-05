@@ -3,7 +3,7 @@
 make
 log=$(date +"%Y-%m-%d_%H-%M-%S")
 ipstr=$(<addr)
-if [ $1 == "-v" ]; then
+if [[ $1 == "-v" ]]; then
     valgrind --leak-check=summary \
         --track-origins=yes \
         ./client -s ${ipstr} -p 8008 -l "logs/client_${log}.log" -f "res/artofrally_1.jpg"

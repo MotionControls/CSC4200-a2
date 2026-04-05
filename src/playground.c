@@ -4,41 +4,27 @@ int main(){
 	// Seeding rand.
 	srand((unsigned)time(NULL) ^ getpid());
 
-	char* path = "res/artofrally_1.jpg";
+	FILE* check1 = fopen("res/artofrally_1.jpg", "rb");
+	fseek(check1, 0L, SEEK_END);
+	size_t size1 = ftell(check1);
+	rewind(check1);
+	uint8_t buffer1[size1];
+	fread(buffer1, sizeof(uint8_t), size1, check1);
+	fclose(check1);
 
-	uint8_t* buffer;
-	size_t totalSize = GetFileContents(&buffer, path);
-	char filename[strlen((char*)buffer)];
-	strcpy(filename, (char*)buffer + FILESTR_SIZE);
-	printf("%s\n", buffer);
-	
-	int packets = (int)ceil(1.0f * totalSize / (HEADER_SIZE + SPLITE_SIZE));
-	int sent = 0;
-	
-	char* front = "downloads/";
-	char downloadPath[strlen(filename) + strlen(front)];
-	strcpy(downloadPath, front);
-	strcat(downloadPath, filename);
-	printf("Downloading to %s.\n", downloadPath);
-	
-	FILE* download = fopen(downloadPath, "wb");
-	int filenameSize = FILESTR_SIZE + strlen(filename);
-	//fwrite(buffer + filenameSize + 1, sizeof(uint8_t), totalSize - filenameSize, download);
+	FILE* check2 = fopen("downloads/artofrally_1.jpg", "rb");
+	fseek(check2, 0L, SEEK_END);
+	size_t size2 = ftell(check2);
+	rewind(check2);
+	uint8_t buffer2[size2];
+	fread(buffer2, sizeof(uint8_t), size2, check2);
+	fclose(check2);
 
-	while(sent < packets){
-		int realSize = ((sent * SPLITE_SIZE) + SPLITE_SIZE > (int)totalSize) ? totalSize - (sent * SPLITE_SIZE) : SPLITE_SIZE;
+	if(size1 != size2) printf("File sizes differ:\t%li & %li\n", size1, size2);
 
-		uint8_t* tempBuffer = malloc(realSize);
-		memcpy(tempBuffer, buffer + filenameSize + 1 + (sent*SPLITE_SIZE), realSize);
-		fwrite(tempBuffer, sizeof(uint8_t), realSize, download);
-		
-		//for(int i = 0; i < realSize; i++) printf("%i\t%i $ %i $ %i\n", sent, *(tempBuffer + i), i, i + (sent * SPLITE_SIZE));
-
-		free(tempBuffer);
-		sent++;
+	for(int i = 0; i < size1; i++){
+		if(buffer1[i] != buffer2[i]) printf("Byte %i differs:\t%u & %u\n", i, buffer1[i], buffer2[i]);
 	}
-
-	fclose(download);
 	
 	return 0;
 }

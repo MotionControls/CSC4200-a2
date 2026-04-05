@@ -176,6 +176,7 @@ int LogPacket(char* log, int recv, Packet packet){
 		(packet.flags & FLAG_SYN) >> 1,
 		packet.flags & FLAG_FIN,
 		packet.length);
+	fflush(file);
 	fclose(file);
 
 	return 1;
@@ -206,7 +207,7 @@ int GetBuffer(struct sockaddr_storage* info, socklen_t* infolen, uint32_t* buffe
 
 		if(!printedAddr){
 			char foundAddr[INET_ADDRSTRLEN];
-			printf("\trecvfrom %s.\n", inet_ntop(info->ss_family, &(((struct sockaddr_in*)info)->sin_addr), foundAddr, INET_ADDRSTRLEN));
+			printf("recvfrom %s.\n", inet_ntop(info->ss_family, &(((struct sockaddr_in*)info)->sin_addr), foundAddr, INET_ADDRSTRLEN));
 			printedAddr = true;
 		}
 
