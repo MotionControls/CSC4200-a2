@@ -122,11 +122,7 @@ int main(int argc, char** argv){
 		printf("Sending packet %i with offset %i to %i (%i).\n", sent, offset, offset + finalSize - 1, finalSize);
 
 		memcpy(split, fileBuffer + offset, finalSize);
-		Packet packet = MakePacket(
-			curSeq,
-			0,
-			split, finalSize,
-			(sent + 1 == packets) ? FLAG_FIN : 0);
+		Packet packet = MakePacket(curSeq, 0, split, finalSize, 0);
 		buffer = realloc(buffer, HEADER_SIZE + finalSize);
 		PacketSerialize(buffer, packet);
 		numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, HEADER_SIZE + finalSize);
@@ -160,6 +156,29 @@ int main(int argc, char** argv){
 		sent++;
 	}while(sent < packets);
 	free(split);
+
+	// Send FIN.
+	printf("Sending FIN...\n");
+	transFail = true;
+	tries = -1;
+	do{
+		tries++;
+		Packet finPacket = MakePacket(curSeq, 0, 0, 0, FLAG_FIN);
+		buffer = realloc(buffer, HEADER_SIZE);
+		PacketSerialize(buffer, finPacket);
+		numbytes = SendBuffer((struct sockaddr*)theirAddr->ai_addr, buffer, sock, HEADER_SIZE);
+		if(CheckSend(numbytes, HEADER_SIZE)) continue;
+		LogPacket(logPath, 0, finPacket);
+
+		numbytes = GetBuffer((struct sockaddr*)theirAddr->ai_addr, &theirSize, buffer, sock);
+		if(CheckRecv(numbytes, HEADER_SIZE)) continue;
+		Packet finackPacket = PacketDeserialize(buffer);
+		if(finackPacket.flags != (FLAG_ACK | FLAG_FIN) || finackPacket.ack != curSeq + 1) continue;
+		LogPacket(logPath, 1, finackPacket);
+		
+		printf("Connection closed cleanly.\n");
+		transFail = false;
+	}while(transFail && tries < 5);
 
 	close(sock);
 	printf("Exiting...\n");

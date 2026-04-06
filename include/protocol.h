@@ -92,6 +92,7 @@ bool CheckSend(int numbytes, int size);
 
 // Logging.
 int LogPacket(char* log, int recv, Packet packet);
+int LogFinish(char* log, struct sockaddr_storage* info);
 char* Timestamp();
 void AddrToChar(char* ipstr, struct sockaddr_in* info);
 

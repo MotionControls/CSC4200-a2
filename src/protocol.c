@@ -182,6 +182,17 @@ int LogPacket(char* log, int recv, Packet packet){
 	return 1;
 }
 
+int LogFinish(char* log, struct sockaddr_storage* info){
+	FILE* file;
+	file = fopen(log, "a");
+	char addr[INET_ADDRSTRLEN];
+	fprintf(file, ":Interaction with %s completed.\n", inet_ntop(info->ss_family, &(((struct sockaddr_in*)info)->sin_addr), addr, INET_ADDRSTRLEN));
+	fflush(file);
+	fclose(file);
+
+	return 1;
+}
+
 /*	Timestamp()
 	Returns a the current time in the format:
 		YYYY-MM-DD-HH-MM-SS

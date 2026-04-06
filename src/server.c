@@ -54,7 +54,7 @@ int main(int argc, char** argv){
 		printf("Recieved SYN.\nSending ACK...\n");
 
 		Packet synackPacket = MakePacket(selfIsn, synPacket.seq + 1, 0, 0, FLAG_ACK | FLAG_SYN);
-		buffer = malloc(HEADER_SIZE + synackPacket.length);
+		buffer = realloc(buffer, HEADER_SIZE + synackPacket.length);
 		PacketSerialize(buffer, synackPacket);
 
 		bool transFail = true;
@@ -83,7 +83,7 @@ int main(int argc, char** argv){
 				return errno;
 			}
 
-			buffer = malloc(PACKET_SIZE);
+			buffer = realloc(buffer, PACKET_SIZE);
 			numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
 			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
 			
@@ -103,9 +103,9 @@ int main(int argc, char** argv){
 		int packets = 0;
 		bool finished = false;
 		FILE* download;
-		bool doTestInterrupt = true;
+		bool doTestInterrupt = false;
 		do{
-			buffer = malloc(PACKET_SIZE);
+			buffer = realloc(buffer, PACKET_SIZE);
 			numbytes = GetBuffer(theirAddr, &theirSize, buffer, sock);
 			if(CheckRecv(numbytes, HEADER_SIZE)) continue;
 
@@ -116,54 +116,64 @@ int main(int argc, char** argv){
 				continue;
 			}
 
-			uint8_t* writePtr;
-			size_t writeSize;
-			if(packets == 0){
-				// Get filename.
-				size_t nameSize = strlen((char*)(packet.payload));
-				char* front = "downloads/";
-				char nameBuffer[strlen(front) + nameSize];
-				strcpy(nameBuffer, front);
-				strcat(nameBuffer, (char*)(packet.payload + FILESTR_SIZE));
-				printf("Recieving %s to %s\n", (char*)(packet.payload + FILESTR_SIZE), nameBuffer);
-
-				// Open file.
-				download = fopen(nameBuffer, "wb");
-
-				// Store payload.
-				//fwrite(packet.payload + nameSize + 1, sizeof(uint8_t), packet.length - nameSize - 1, download);
-				writePtr = packet.payload + nameSize + 1;
-				writeSize = packet.length - nameSize - 1;
-			}else{
-				//fwrite(packet.payload, sizeof(uint8_t), packet.length, download);
-				writePtr = packet.payload;
-				writeSize = packet.length;
-			}
-
 			if(doTestInterrupt && packets == 2){
 				printf("**********Test Interrupt**********\n");
 				doTestInterrupt = false;
 				continue;
 			}
 			
-			// Send ACK.
-			printf("Sending ACK %i.\n", packets);
-			Packet ackPacket = MakePacket(0, exSeq + packet.length, 0, 0, FLAG_ACK);
-			buffer = malloc(HEADER_SIZE);
-			PacketSerialize(buffer, ackPacket);
-			numbytes = SendBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE);
-			if(CheckSend(numbytes, HEADER_SIZE)) continue;
-			LogPacket(logPath, 0, ackPacket);
-			
-			fwrite(writePtr, sizeof(uint8_t), writeSize, download);
+			if(packet.flags == FLAG_FIN){
+				printf("Got FIN at packet %i.\n", packets);
 
-			finished = (packet.flags == FLAG_FIN);
-			exSeq += packet.length;
-			packets++;
+				Packet finackPacket = MakePacket(0, packet.seq + 1, 0, 0, FLAG_FIN | FLAG_ACK);
+				buffer = realloc(buffer, HEADER_SIZE);
+				PacketSerialize(buffer, finackPacket);
+				numbytes = SendBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE);
+				if(CheckSend(numbytes, HEADER_SIZE)) continue;
+
+				LogFinish(logPath, theirAddr);
+				finished = true;
+			}else{
+				uint8_t* writePtr;
+				size_t writeSize;
+				if(packets == 0){
+					// Get filename.
+					size_t nameSize = strlen((char*)(packet.payload));
+					char* front = "downloads/";
+					char nameBuffer[strlen(front) + nameSize];
+					strcpy(nameBuffer, front);
+					strcat(nameBuffer, (char*)(packet.payload + FILESTR_SIZE));
+					printf("Recieving %s to %s\n", (char*)(packet.payload + FILESTR_SIZE), nameBuffer);
+
+					// Open file.
+					download = fopen(nameBuffer, "wb");
+
+					// Store payload.
+					writePtr = packet.payload + nameSize + 1;
+					writeSize = packet.length - nameSize - 1;
+				}else{
+					writePtr = packet.payload;
+					writeSize = packet.length;
+				}
+
+				// Send ACK.
+				printf("Sending ACK %i.\n", packets);
+				Packet ackPacket = MakePacket(0, exSeq + packet.length, 0, 0, FLAG_ACK);
+				buffer = realloc(buffer, HEADER_SIZE);
+				PacketSerialize(buffer, ackPacket);
+				numbytes = SendBuffer((struct sockaddr*)theirAddr, buffer, sock, HEADER_SIZE);
+				if(CheckSend(numbytes, HEADER_SIZE)) continue;
+				LogPacket(logPath, 0, ackPacket);
+
+				fwrite(writePtr, sizeof(uint8_t), writeSize, download);
+				exSeq += packet.length;
+				packets++;
+			}
 		}while(!finished);
 		fclose(download);
 
-		printf("All packets received.\n");
+		printf("Waiting for next client...\n");
+		selfIsn = (uint32_t)rand();
 	}
 
 	printf("Exiting...\n");
